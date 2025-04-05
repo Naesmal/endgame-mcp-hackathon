@@ -1,90 +1,164 @@
-# MCP (Model Context Protocol) Challenge - Masa Subnet 42
+<p align="center">
+  <img src="https://animated-botany-8d4.notion.site/image/attachment%3A019cc489-1e46-4232-a725-c4d4717cd7c3%3Amcp_42.jpg?table=block&id=1bc20952-12fb-80b1-a3c0-dc822b342dda&width=520&userId=&cache=v2" alt="Masa Subnet 42 MCP Challenge" width="200" />
+</p>
 
-## Overview
+## 🌟 Overview
 
-Build an innovative Model Context Protocol (MCP) implementation for Masa's Subnet 42. Think of MCP as a USB-C port for AI applications - it standardizes how AI models connect to and utilize different data sources and contextual information.
+The Masa Subnet 42 MCP Plugin is an implementation of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) that connects Large Language Models (LLMs) to the Bittensor network and Masa Subnet 42. This plugin enables AI assistants to retrieve real-time data from the Bittensor network, search Twitter, and index data for future retrieval.
 
-## Prize Pool: $5,000 USDC
-- 🥇 1st place: $2,500
-- 🥈 2nd place: $1,250
-- 🥉 3rd place: $750
-- 4th place: $300
-- 5th place: $200
+This MCP server provides both **resources** (for loading information into the LLM's context) and **tools** (for executing code and producing side effects) that expand the capabilities of AI assistants.
 
-## Challenge Requirements
+## 🚀 Features
 
-### Technical Implementation (40%)
-- Design and implement a Model Context Protocol
-- Create interfaces for data source integration
-- Develop context management systems
-- Bonus: Integration with Bittensor ecosystem
+- **Bittensor Network Integration**
+  - Access subnet information
+  - View neuron and validator data
+  - Get real-time network statistics
 
-### Innovation (25%)
-- Novel approaches to context handling
-- Creative data integration methods
-- Unique applications of contextual awareness
+- **Twitter Search Capabilities**
+  - Search for tweets with advanced filtering
+  - Retrieve historical Twitter search results
 
-### Performance (20%)
-- Efficient resource utilization
-- Low latency responses
-- Scalable architecture
+- **Data Indexing and Querying**
+  - Index arbitrary data for future retrieval
+  - Query indexed data with natural language
 
-### Documentation (15%)
-- Clear implementation guide
-- Protocol specification
-- Integration examples
+## 🛠️ Installation
 
-## Repository Structure
-```
-.
-├── src/                  # Your implementation
-├── docs/                 # Your documentation
-│   ├── IMPLEMENTATION.md
-│   └── SPECIFICATION.md
-├── tests/               # Your tests
-└── README.md
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (v18 or higher)
+- npm (v7 or higher)
+
+### Setup
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/Naesmal/masa-mcp-plugin.git
+cd masa-mcp-plugin
 ```
 
-## Submission Process
+2. Install dependencies:
 
-1. Fork this repository
-2. Build your MCP implementation
-3. Document your approach
-4. Submit via pull request
+```bash
+npm install
+```
 
-## What is MCP?
+3. Create a `.env` file in the project root:
 
-MCP ensures models evolve beyond static training data by:
-- Providing standardized access to contextual data
-- Enabling real-time data integration
-- Supporting dynamic context management
-- Facilitating transparent decision processes
+```
+# Mode Configuration (API or PROTOCOL)
+MASA_MODE=API  # Options: API or PROTOCOL
 
-## What is Subnet 42?
+# API Configuration
+MASA_API_KEY=your_api_key_here
+MASA_API_BASE_URL=https://api1.dev.masalabs.ai
 
-Masa Subnet 42 is a decentralized data layer for AI agents and applications, featuring:
-- Real-time data pipelines
-- Decentralized storage solutions
-- Enterprise time series capabilities
-- Vector store functionality
+# Protocol Configuration
+MASA_PROTOCOL_NODE_URL=http://localhost:8080
 
-## Evaluation Criteria
+# MCP Server Configuration
+MCP_SERVER_NAME=Masa Subnet 42 Data Provider
+MCP_SERVER_VERSION=1.0.0
+MCP_SERVER_DESCRIPTION=Provides data access to Masa Subnet 42 resources
+MCP_TRANSPORT_TYPE=stdio  # Options: stdio, http
+MCP_HTTP_PORT=3030  # Port for HTTP transport
+MCP_HTTP_HOST=localhost  # Host for HTTP transport
 
-Submissions will be judged on:
-- Protocol design elegance
-- Implementation quality
-- Performance metrics
-- Documentation clarity
-- Integration ease
+# Log Configuration
+LOG_LEVEL=info  # Options: debug, info, warn, error
 
-## Getting Started
+# Bittensor Configuration
+#TAO_STAT_API_KEY=your_taostat_api_key_here #(uncomment this line if you want to use the Bittensor API)
 
-1. Clone this repository
-2. Review the challenge requirements
-3. Design your solution
-4. Implement and test
-5. Submit your work
+```
 
-## License
+4. Build the project:
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+npm run build
+```
+
+## 🚀 Usage
+
+### Running as a standalone server
+
+Start the MCP server:
+
+```bash
+npm start
+```
+
+### Integrating with Claude Desktop
+
+1. Open Claude Desktop and navigate to Settings > Developer > Edit Config
+2. Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "masa-subnet-mcp": {
+      "command": "node",
+        "args": [
+          "path/dist/index.js"
+        ]
+    }
+  }
+}
+```
+
+3. Restart Claude Desktop
+4. Click on the tools icon in the input box to see available tools
+
+## 🧰 Available Tools & Resources
+
+### Tools
+
+- `twitter_search` - Search for tweets on a specific topic
+- `twitter_advanced_search` - Search Twitter with advanced filtering
+- `index_data` - Index data for future retrieval
+- `query_data` - Query previously indexed data
+- `bittensor_subnet_info` - Get information about a Bittensor subnet
+- `bittensor_subnet_nodes` - List nodes in a Bittensor subnet
+- `bittensor_validator_info` - Get information about a validator
+- `bittensor_neuron_info` - Get information about a neuron
+- `bittensor_network_stats` - Get Bittensor network statistics
+- `subnet_info` - Get information about Masa Subnet 42
+- `bittensor_search` - Search for entities in the Bittensor network
+
+### Resources
+
+- `twitter-search://{searchId}` - Access Twitter search results
+- `bittensor-subnet://{netuid}` - Access Bittensor subnet data
+- `bittensor-neuron://{subnet}/{hotkey}` - Access neuron information
+- `bittensor-network://{type}` - Access network-level information
+- `data://bittensor/{category}/{query}` - Structured data access
+
+## 📚 Documentation
+
+For more detailed information, please refer to:
+
+- [Implementation Guide](docs/IMPLEMENTATION.md)
+- [Protocol Specification](docs/SPECIFICATION.md)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 🙏 Acknowledgements
+
+- [Model Context Protocol](https://modelcontextprotocol.io/) for creating the standard
+- [Anthropic](https://www.anthropic.com/) for Claude and the Claude Desktop application
+- [Bittensor](https://bittensor.com/) for the decentralized machine learning network
+- [Masa Subnet 42](https://masa.ai/) for their data infrastructure
+
+---
+
+<p align="center">Made with ❤️ for the Masa Subnet 42 Challenge</p>
