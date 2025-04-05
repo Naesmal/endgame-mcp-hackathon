@@ -35,6 +35,16 @@ The overall architecture can be visualized as:
                              └───────────────┘ └─────────────┘  └───────────────┘
 ```
 
+## Masa Resources and API Access
+
+### Setting Up Masa Protocol
+For detailed instructions on setting up the Masa Protocol environment, please refer to the official documentation:
+- [Masa Protocol Environment Setup Guide](https://developers.masa.ai/docs/masa-protocol/environment-setup)
+
+### Obtaining a Masa API Key
+To obtain an API key for accessing Masa API services, please visit:
+- [Masa API Documentation](https://developers.masa.ai/docs/index-API/masa-api-search)
+
 ## Components
 
 The implementation consists of these core components:

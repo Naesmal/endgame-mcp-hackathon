@@ -80,6 +80,16 @@ LOG_LEVEL=info  # Options: debug, info, warn, error
 npm run build
 ```
 
+## 🔑 Masa API and Protocol Setup
+
+### Obtaining Masa API Key
+To get a Masa API key for this project, visit:
+- [Masa API Documentation](https://developers.masa.ai/docs/index-API/masa-api-search)
+
+### Setting Up Masa Protocol
+For instructions on setting up the Masa Protocol environment, refer to:
+- [Masa Protocol Environment Setup Guide](https://developers.masa.ai/docs/masa-protocol/environment-setup)
+
 ## 🚀 Usage
 
 ### Running as a standalone server
@@ -141,6 +151,8 @@ For more detailed information, please refer to:
 
 - [Implementation Guide](docs/IMPLEMENTATION.md)
 - [Protocol Specification](docs/SPECIFICATION.md)
+- [Masa API Documentation](https://developers.masa.ai/docs/index-API/masa-api-search)
+- [Masa Protocol Documentation](https://developers.masa.ai/docs/masa-protocol/environment-setup)
 
 ## 🤝 Contributing
 
