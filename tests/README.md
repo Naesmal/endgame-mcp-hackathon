@@ -1,57 +1,57 @@
-# Tests Unitaires pour Masa Subnet 42 MCP Server
+# Unit Tests for Masa Subnet 42 MCP Server
 
-Ce répertoire contient les tests unitaires pour le projet Masa Subnet 42 MCP Server.
+This directory contains unit tests for the Masa Subnet 42 MCP Server project.
 
 ## Structure
 
 ```
 tests/
-├── mocks/              # Mocks pour les dépendances externes
-├── services/           # Tests pour les services (MasaService, BittensorService, etc.)
-├── tools/              # Tests pour les outils MCP (Twitter, Data Indexing, Bittensor, etc.)
-├── utils/              # Tests pour les utilitaires (helpers, logger, etc.)
-├── server/             # Tests pour les composants du serveur
-└── resources/          # Tests pour les ressources MCP
+├── mocks/              # Mocks for external dependencies
+├── services/           # Tests for services (MasaService, BittensorService, etc.)
+├── tools/              # Tests for MCP tools (Twitter, Data Indexing, Bittensor, etc.)
+├── utils/              # Tests for utilities (helpers, logger, etc.)
+├── server/             # Tests for server components
+└── resources/          # Tests for MCP resources
 ```
 
-## Exécution des tests
+## Running Tests
 
-### Exécuter tous les tests
+### Run all tests
 
 ```bash
 npm test
 ```
 
-### Exécuter les tests avec surveillance des modifications
+### Run tests in watch mode
 
 ```bash
 npm run test:watch
 ```
 
-### Exécuter les tests avec rapport de couverture
+### Run tests with coverage report
 
 ```bash
 npm run test:coverage
 ```
 
-Le rapport de couverture sera généré dans le répertoire `coverage/`.
+The coverage report will be generated in the `coverage/` directory.
 
 ## Configuration
 
-La configuration des tests se trouve dans le fichier `jest.config.js` à la racine du projet.
+Test configuration is located in the `jest.config.js` file at the root of the project.
 
 ## Mocks
 
-Nous utilisons des mocks pour simuler les dépendances externes comme l'environnement, le logger, et les services externes. Les fichiers de mock se trouvent dans le répertoire `tests/mocks/`.
+We use mocks to simulate external dependencies such as environment variables, loggers, and external services. Mock files are located in the `tests/mocks/` directory.
 
-## Astuces pour écrire des tests
+## Tips for Writing Tests
 
-1. **Isoler les tests** : Chaque test doit être indépendant des autres.
-2. **Mock les dépendances externes** : Utilisez `jest.mock()` pour simuler les dépendances externes.
-3. **Tester les cas d'erreur** : Assurez-vous de tester les cas où des erreurs se produisent.
-4. **Utiliser `beforeEach` et `afterEach`** : Pour réinitialiser l'état entre les tests.
-5. **Limiter la portée des tests** : Chaque test doit tester une seule chose à la fois.
+1. **Isolate tests**: Each test should be independent from the others.
+2. **Mock external dependencies**: Use `jest.mock()` to simulate external modules.
+3. **Test error scenarios**: Make sure to cover edge cases and failure conditions.
+4. **Use `beforeEach` and `afterEach`**: To reset state between tests.
+5. **Keep tests focused**: Each test should validate one specific behavior.
 
-## Exemples
+## Examples
 
-Consultez les tests existants pour des exemples sur la façon d'écrire des tests pour différents types de composants.
+Refer to the existing tests for examples of how to write tests for different types of components.

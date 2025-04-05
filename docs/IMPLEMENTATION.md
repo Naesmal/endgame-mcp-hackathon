@@ -144,8 +144,8 @@ Ensure you have:
 Clone and set up the repository:
 
 ```bash
-git clone https://github.com/Naesmal/masa-mcp-plugin.git
-cd masa-mcp-plugin
+git clone https://github.com/Naesmal/endgame-mcp-hackathon.git
+cd endgame-mcp-hackathon
 npm install
 ```
 
