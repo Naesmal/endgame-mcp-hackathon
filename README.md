@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://animated-botany-8d4.notion.site/image/attachment%3A019cc489-1e46-4232-a725-c4d4717cd7c3%3Amcp_42.jpg?table=block&id=1bc20952-12fb-80b1-a3c0-dc822b342dda&width=520&userId=&cache=v2" alt="Masa Subnet 42 MCP Challenge" width="200" />
+  <img src="https://animated-botany-8d4.notion.site/image/attachment%3A019cc489-1e46-4232-a725-c4d4717cd7c3%3Amcp_42.jpg?table=block&id=1bc20952-12fb-80b1-a3c0-dc822b342dda" alt="Masa Subnet 42 MCP Challenge" width="200" />
 </p>
 
 ## 🌟 Overview
