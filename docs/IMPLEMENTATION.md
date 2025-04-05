@@ -206,10 +206,9 @@ npm start
 {
   "mcpServers": {
     "masa-subnet": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "masa-mcp-plugin"
+        "path/dist/index.js"
       ]
     }
   }

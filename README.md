@@ -35,8 +35,8 @@ This MCP server provides both **resources** (for loading information into the LL
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/Naesmal/masa-mcp-plugin.git
-cd masa-mcp-plugin
+git clone https://github.com/Naesmal/endgame-mcp-hackathon
+cd endgame-mcp-hackathon
 ```
 
 2. Install dependencies:
