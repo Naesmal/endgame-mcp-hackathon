@@ -1,0 +1,14 @@
+node_modules
+.env
+.DS_Store
+coverage
+dist
+.vscode
+.idea
+*.log
+*.log.*
+*.log-*
+*.log/*
+.venv
+venv
+__pycache__
