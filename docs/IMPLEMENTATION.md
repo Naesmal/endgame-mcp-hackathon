@@ -154,20 +154,30 @@ npm install
 Create a `.env` file with required settings:
 
 ```
-# Masa Configuration
-MASA_MODE=PROTOCOL
-MASA_API_KEY=your_masa_api_key
-MASA_API_BASE_URL=https://api.masasubnet.com/v1
-MASA_PROTOCOL_NODE_URL=https://protocol.masasubnet.com/v1
+# Mode Configuration (API or PROTOCOL)
+MASA_MODE=API  # Options: API or PROTOCOL
 
-# Bittensor Configuration (optional, but recommended)
-TAO_STAT_API_KEY=your_tao_stat_api_key
+# API Configuration
+MASA_API_KEY=your_api_key_here
+MASA_API_BASE_URL=https://api1.dev.masalabs.ai
+
+# Protocol Configuration
+MASA_PROTOCOL_NODE_URL=http://localhost:8080
 
 # MCP Server Configuration
 MCP_SERVER_NAME=Masa Subnet 42 Data Provider
 MCP_SERVER_VERSION=1.0.0
 MCP_SERVER_DESCRIPTION=Provides data access to Masa Subnet 42 resources
-MCP_TRANSPORT_TYPE=stdio
+MCP_TRANSPORT_TYPE=stdio  # Options: stdio, http
+MCP_HTTP_PORT=3030  # Port for HTTP transport
+MCP_HTTP_HOST=localhost  # Host for HTTP transport
+
+# Log Configuration
+LOG_LEVEL=info  # Options: debug, info, warn, error
+
+# Bittensor Configuration
+#TAO_STAT_API_KEY=your_taostat_api_key_here #(uncomment this line if you want to use the Bittensor API)
+
 ```
 
 ### 4. Building
