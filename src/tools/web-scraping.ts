@@ -110,7 +110,7 @@ export function registerWebScrapingTool(
         const request = {
           url,
           depth: depth || 1,
-          format: 'html' // Le format HTML permet d'extraire plus d'informations
+          format: 'html' as 'text' | 'html' | 'json' // Le format HTML permet d'extraire plus d'informations
         };
         
         // Exécuter le scraping
