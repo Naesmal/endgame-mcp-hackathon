@@ -178,3 +178,65 @@ export interface BittensorNetworkStats {
   blockTime: number;
   lastUpdated: string;
 }
+
+// Type pour la requête de scraping web
+export interface WebScrapeRequest {
+  url: string;
+  format?: 'text' | 'html' | 'json';
+  depth?: number;
+}
+
+// Type pour le résultat de scraping web
+export interface WebScrapeResult {
+  id?: string;
+  title?: string;
+  content: string;
+  url: string;
+  metadata?: Record<string, any>;
+  error?: string;
+}
+
+// Type pour la requête d'extraction de termes
+export interface TermExtractionRequest {
+  userInput: string;
+  count?: number;
+}
+
+// Type pour le résultat d'extraction de termes
+export interface TermExtractionResult {
+  searchTerms: string[];
+  thinking?: string;
+  error?: string;
+}
+
+// Type pour la requête d'analyse de données
+export interface DataAnalysisRequest {
+  tweets: string | string[];
+  prompt: string;
+}
+
+// Type pour le résultat d'analyse de données
+export interface DataAnalysisResult {
+  result: string;
+  error?: string;
+}
+
+// Type pour la requête de recherche par similarité
+export interface SimilaritySearchRequest {
+  query: string;
+  keywords?: string[];
+  maxResults?: number;
+  namespace?: string;
+}
+
+// Type pour le résultat de recherche par similarité
+export interface SimilaritySearchResult {
+  results: Array<{
+    id: string;
+    text: string;
+    similarity: number;
+    [key: string]: any;
+  }>;
+  total: number;
+  error?: string;
+}

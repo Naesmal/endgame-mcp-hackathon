@@ -12,6 +12,17 @@ export const API_ENDPOINTS = {
     INDEX: '/data/index',
     QUERY: '/data/query',
     STATUS: '/data/status',
+  },
+  
+  // Nouveaux endpoints
+  WEB: {
+    SCRAPE: '/search/live/web/scrape',
+  },
+  
+  ANALYSIS: {
+    TERMS_EXTRACTION: '/search/extraction',
+    DATA_ANALYSIS: '/search/analysis',
+    SIMILARITY: '/search/similarity/twitter',
   }
 };
 
@@ -27,6 +38,11 @@ export const PROTOCOL_ENDPOINTS = {
   DATA: {
     INDEX: '/api/v1/data/index',
     QUERY: '/api/v1/data/query',
+  },
+  
+  // Nouveaux endpoints pour le protocole
+  WEB: {
+    SCRAPE: '/api/v1/data/web',
   }
 };
 

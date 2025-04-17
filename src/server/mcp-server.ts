@@ -68,6 +68,15 @@ export class MasaSubnetMcpServer {
       const { registerDataIndexingTool } = await import('../tools/data-indexing.js');
       registerDataIndexingTool(this.server, masaService);
       
+      // Nouveaux outils
+      // Importer et enregistrer l'outil de scraping web
+      const { registerWebScrapingTool } = await import('../tools/web-scraping.js');
+      registerWebScrapingTool(this.server, masaService);
+      
+      // Importer et enregistrer l'outil d'analyse de données
+      const { registerDataAnalysisTool } = await import('../tools/data-analysis.js');
+      registerDataAnalysisTool(this.server, masaService);
+      
       // Enregistrer les outils Bittensor seulement si Bittensor est activé
       if (isBittensorEnabled()) {
         // Importer et enregistrer l'outil d'information Bittensor
@@ -116,6 +125,10 @@ Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to you
       // Importer et enregistrer la ressource de recherche Twitter uniquement
       const { registerDataResource } = await import('../resources/data-resource.js');
       registerDataResource(this.server, masaService);
+      
+      // Nouvelle ressource web
+      const { registerWebResource } = await import('../resources/web-resource.js');
+      registerWebResource(this.server, masaService);
       
       // Importer et enregistrer les ressources Bittensor seulement si Bittensor est activé
       if (isBittensorEnabled()) {

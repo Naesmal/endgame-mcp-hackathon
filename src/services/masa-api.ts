@@ -8,7 +8,16 @@ import {
   DataIndexRequest,
   DataIndexResult,
   DataQueryRequest,
-  DataQueryResult
+  DataQueryResult,
+  // Nouveaux types
+  WebScrapeRequest,
+  WebScrapeResult,
+  TermExtractionRequest,
+  TermExtractionResult,
+  DataAnalysisRequest,
+  DataAnalysisResult,
+  SimilaritySearchRequest,
+  SimilaritySearchResult
 } from '../types';
 import logger from '../utils/logger';
 import { objectToURLParams } from '../utils/helpers';
@@ -56,11 +65,7 @@ export class MasaApiService implements MasaService {
     );
   }
   
-  /**
-   * Recherche des tweets sur Twitter/X
-   * @param request Paramètres de recherche
-   * @returns Résultats de la recherche
-   */
+  // Méthodes existantes - conservées telles quelles
   async searchTwitter(request: TwitterSearchRequest): Promise<TwitterSearchResult> {
     try {
       const response = await this.client.post(API_ENDPOINTS.TWITTER.SEARCH, request);
@@ -71,11 +76,6 @@ export class MasaApiService implements MasaService {
     }
   }
   
-  /**
-   * Vérifie le statut d'une recherche Twitter
-   * @param jobId ID du job de recherche
-   * @returns Statut de la recherche
-   */
   async checkTwitterSearchStatus(jobId: string): Promise<{
     status: 'pending' | 'completed' | 'failed';
     message?: string;
@@ -89,11 +89,6 @@ export class MasaApiService implements MasaService {
     }
   }
   
-  /**
-   * Récupère les résultats d'une recherche Twitter
-   * @param jobId ID du job de recherche
-   * @returns Résultats de la recherche
-   */
   async getTwitterSearchResults(jobId: string): Promise<TwitterSearchResult> {
     try {
       const response = await this.client.get(`${API_ENDPOINTS.TWITTER.RESULT}/${jobId}`);
@@ -104,11 +99,6 @@ export class MasaApiService implements MasaService {
     }
   }
   
-  /**
-   * Indexe des données dans le subnet
-   * @param request Données à indexer
-   * @returns Résultat de l'indexation
-   */
   async indexData(request: DataIndexRequest): Promise<DataIndexResult> {
     try {
       // Valider le namespace (twitter ou bittensor)
@@ -134,11 +124,6 @@ export class MasaApiService implements MasaService {
     }
   }
   
-  /**
-   * Recherche des données dans le subnet
-   * @param request Paramètres de recherche
-   * @returns Résultats de la recherche
-   */
   async queryData(request: DataQueryRequest): Promise<DataQueryResult> {
     try {
       // Valider le namespace (twitter ou bittensor)
@@ -164,11 +149,6 @@ export class MasaApiService implements MasaService {
     }
   }
   
-  /**
-   * Vérifie le statut d'une indexation de données
-   * @param jobId ID du job d'indexation
-   * @returns Statut de l'indexation
-   */
   async checkDataIndexStatus(jobId: string): Promise<{
     status: 'pending' | 'completed' | 'failed';
     message?: string;
@@ -179,6 +159,137 @@ export class MasaApiService implements MasaService {
     } catch (error) {
       logger.error(`Error checking data index status for job ${jobId}:`, error);
       throw error;
+    }
+  }
+  
+  // Nouvelles méthodes
+  
+  /**
+   * Scrape une page web pour extraire son contenu
+   * @param request Paramètres de scraping
+   * @returns Résultat du scraping
+   */
+  async scrapeWeb(request: WebScrapeRequest): Promise<WebScrapeResult> {
+    try {
+      logger.info(`Scraping web page: ${request.url}`);
+      
+      const payload = {
+        url: request.url,
+        format: request.format || 'text'
+      };
+      
+      const response = await this.client.post(API_ENDPOINTS.WEB.SCRAPE, payload);
+      
+      return {
+        title: response.data.title,
+        content: response.data.content,
+        url: response.data.url,
+        metadata: response.data.metadata || {}
+      };
+    } catch (error) {
+      logger.error(`Error scraping web page ${request.url}:`, error);
+      return {
+        url: request.url,
+        content: '',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+  
+  /**
+   * Extraire des termes de recherche à partir d'un prompt utilisateur (via IA)
+   * @param request Prompt utilisateur
+   * @returns Termes de recherche générés
+   */
+  async extractSearchTerms(request: TermExtractionRequest): Promise<TermExtractionResult> {
+    try {
+      logger.info(`Extracting search terms from: ${request.userInput}`);
+      
+      const response = await this.client.post(API_ENDPOINTS.ANALYSIS.TERMS_EXTRACTION, {
+        userInput: request.userInput
+      });
+      
+      // Adapter le format de l'API à notre interface
+      // L'API retourne un seul terme, mais notre interface attend un tableau
+      const searchTerms = [response.data.searchTerm];
+      
+      return {
+        searchTerms,
+        thinking: response.data.thinking
+      };
+    } catch (error) {
+      logger.error('Error extracting search terms:', error);
+      return {
+        searchTerms: [],
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+  
+  /**
+   * Analyser des tweets avec un prompt personnalisé
+   * @param request Tweets et prompt d'analyse
+   * @returns Résultat de l'analyse
+   */
+  async analyzeData(request: DataAnalysisRequest): Promise<DataAnalysisResult> {
+    try {
+      logger.info(`Analyzing data with prompt: ${request.prompt}`);
+      
+      // Préparer les tweets au format attendu par l'API
+      const tweetsText = Array.isArray(request.tweets) 
+        ? request.tweets.join('\n') 
+        : request.tweets;
+      
+      const response = await this.client.post(API_ENDPOINTS.ANALYSIS.DATA_ANALYSIS, {
+        tweets: tweetsText,
+        prompt: request.prompt
+      });
+      
+      return {
+        result: response.data.result
+      };
+    } catch (error) {
+      logger.error('Error analyzing data:', error);
+      return {
+        result: '',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+  
+  /**
+   * Recherche par similarité sémantique
+   * @param request Paramètres de recherche
+   * @returns Résultats de la recherche
+   */
+  async searchBySimilarity(request: SimilaritySearchRequest): Promise<SimilaritySearchResult> {
+    try {
+      logger.info(`Searching by similarity: ${request.query}`);
+      
+      // Vérifier le namespace (par défaut = twitter)
+      const namespace = request.namespace?.toLowerCase() === 'bittensor'
+        ? 'bittensor'
+        : 'twitter';
+      
+      const response = await this.client.post(API_ENDPOINTS.ANALYSIS.SIMILARITY, {
+        query: request.query,
+        keywords: request.keywords || [],
+        max_results: request.maxResults || 10,
+        namespace: namespace
+      });
+      
+      // Adapter le format de la réponse à notre interface
+      return {
+        results: response.data.results,
+        total: response.data.results.length
+      };
+    } catch (error) {
+      logger.error('Error searching by similarity:', error);
+      return {
+        results: [],
+        total: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
   }
 }
