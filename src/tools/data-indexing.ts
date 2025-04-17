@@ -11,6 +11,34 @@ import { env } from '../config/env';
  * @param masaService Service Masa à utiliser
  */
 export function registerDataIndexingTool(server: McpServer, masaService: MasaService): void {
+  // Ajouter une information sur l'utilisation du stockage en mémoire
+  server.tool(
+    'data_info',
+    {},
+    async () => {
+      logger.info('Data info tool called');
+      
+      return {
+        content: [{ 
+          type: "text", 
+          text: `# Data Indexing Information
+
+Data indexing and querying operations use an in-memory storage system.
+This means:
+- Data is stored only for the duration of the server process
+- Data will be lost when the server is restarted
+- Operations are blazing fast but not persistent
+
+This implementation works in both API and PROTOCOL modes.
+
+## Available tools:
+- index_data: Store data in memory
+- query_data: Retrieve stored data using simple text search`
+        }]
+      };
+    }
+  );
+  
   // Outil d'indexation de données
   server.tool(
     'index_data',
@@ -37,7 +65,7 @@ export function registerDataIndexingTool(server: McpServer, masaService: MasaSer
         // Convertir les données en texte si elles sont complexes
         let dataToIndex = typeof data === 'string' ? data : JSON.stringify(data);
         
-        // Indexer les données
+        // Indexer les données (utilise maintenant le mock service en interne)
         const indexResult = await masaService.indexData({
           data: dataToIndex,
           metadata,
@@ -55,14 +83,14 @@ export function registerDataIndexingTool(server: McpServer, masaService: MasaSer
           };
         }
         
-        // Si en mode API, le statut pourrait être 'pending', donc vérifier périodiquement
-        if (env.MASA_MODE === 'API' && indexResult.status === 'pending') {
+        // Si le statut est "pending", vérifier périodiquement
+        if (indexResult.status === 'pending') {
           const jobId = indexResult.id;
           logger.info(`Data indexing job created with ID: ${jobId}`);
           
           // Vérifier l'état de l'indexation jusqu'à ce qu'elle soit terminée
           let status = 'pending';
-          // Initialiser statusResult avec un objet vide pour éviter l'erreur undefined
+          // Initialiser statusResult avec un objet par défaut pour éviter l'erreur undefined
           let statusResult: { status: string, message?: string } = { status: 'pending' };
           
           // Attendre que l'indexation soit terminée (avec timeout après 30 secondes)
@@ -75,7 +103,7 @@ export function registerDataIndexingTool(server: McpServer, masaService: MasaSer
               return {
                 content: [{
                   type: 'text',
-                  text: `Data indexing job ${jobId} is still in progress. You can check its status later with the checkDataIndexStatus method.`
+                  text: `Data indexing job ${jobId} is still in progress. Check 'data_info' for more information.`
                 }]
               };
             }
@@ -136,7 +164,7 @@ export function registerDataIndexingTool(server: McpServer, masaService: MasaSer
       try {
         logger.info(`Querying data in namespace: ${namespace} with query: "${query}"`);
         
-        // Effectuer la requête
+        // Effectuer la requête (utilise maintenant le mock service en interne)
         const queryResult = await masaService.queryData({
           query,
           namespace,
@@ -200,6 +228,9 @@ export function registerDataIndexingTool(server: McpServer, masaService: MasaSer
         
         response += `---\n${paginationInfo}${moreInfo}`;
         
+        // Ajouter une note sur le stockage en mémoire
+        response += `\n\nNote: Data is stored in memory for the current session only.`;
+        
         return {
           content: [{
             type: 'text',
@@ -220,5 +251,5 @@ export function registerDataIndexingTool(server: McpServer, masaService: MasaSer
     }
   );
   
-  logger.info('Data indexing tools registered successfully');
+  logger.info('Data indexing tools registered successfully for in-memory storage');
 }

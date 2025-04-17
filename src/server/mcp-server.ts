@@ -54,7 +54,7 @@ export class MasaSubnetMcpServer {
     try {
       // Créer le service Masa approprié en fonction du mode configuré
       const masaService = await MasaServiceFactory.createService(this.currentMode);
-      logger.info(`Masa service created in ${this.currentMode} mode`);
+      logger.info(`Masa service created in ${this.currentMode} mode with data service`);
       
       // Créer le service Bittensor
       const bittensorService = await BittensorServiceFactory.createService();
@@ -92,6 +92,7 @@ export class MasaSubnetMcpServer {
     return supportedModes.includes(this.currentMode);
   }
   
+// mcp-server.ts (suite)
   /**
    * Enregistre les outils MCP
    * @param masaService Service Masa à utiliser
@@ -121,8 +122,8 @@ export class MasaSubnetMcpServer {
           name: 'Data indexing',
           module: '../tools/data-indexing.js',
           func: 'registerDataIndexingTool',
-          registeredTools: ['index_data', 'query_data'],
-          supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
+          registeredTools: ['data_info', 'index_data', 'query_data'],
+          supportedModes: ['API', 'PROTOCOL'] // Maintenant disponible dans les deux modes via le mock service
         },
         { 
           name: 'Web scraping basic',
