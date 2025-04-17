@@ -190,20 +190,18 @@ export class MasaProtocolService implements MasaService {
     try {
       logger.info(`Scraping web page via protocol: ${request.url}`);
       
-      // Le protocole supporte uniquement l'endpoint web scraping basique
+      // Construire la requête pour l'endpoint du Protocol
       const response = await this.client.post(PROTOCOL_ENDPOINTS.WEB.SCRAPE, {
         url: request.url,
         depth: request.depth || 1
       });
       
-      // Adapter le format de la réponse à notre interface
-      return {
-        id: generateId('web_scrape'),
-        title: response.data.title || 'Webpage Content',
-        content: response.data.content || response.data.html || response.data.text || '',
-        url: request.url,
-        metadata: response.data.metadata || {}
-      };
+      // Journaliser la réponse brute pour débogage
+      logger.debug(`Protocol web scrape raw response: ${JSON.stringify(response.data)}`);
+      
+      // En mode Protocol, on renvoie directement la réponse telle quelle
+      // pour que l'outil puisse la traiter correctement
+      return response.data;
     } catch (error) {
       logger.error(`Error scraping web page via protocol ${request.url}:`, error);
       return {
