@@ -39,5 +39,17 @@
         "ts-jest": "^29.1.1",
         "tsx": "^4.6.0",
         "typescript": "^5.3.2"
-    }
+    },
+    "directories": {
+        "doc": "docs",
+        "test": "tests"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Naesmal/endgame-mcp-hackathon.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Naesmal/endgame-mcp-hackathon/issues"
+    },
+    "homepage": "https://github.com/Naesmal/endgame-mcp-hackathon#readme"
 }

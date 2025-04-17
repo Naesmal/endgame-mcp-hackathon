@@ -72,82 +72,100 @@ export class MasaSubnetMcpServer {
     try {
       logger.info('Starting tools registration...');
       
-      // Enregistrement synchrone des outils pour éviter les problèmes d'imports dynamiques
-      
-      // Outil de recherche Twitter
-      try {
-        logger.info('Registering Twitter search tools...');
-        const twitterSearchModule = await import('../tools/twitter-search.js');
-        if (typeof twitterSearchModule.registerTwitterSearchTool === 'function') {
-          twitterSearchModule.registerTwitterSearchTool(this.server, masaService);
-          this.registeredTools.push('twitter_search', 'twitter_advanced_search');
-          logger.info('Twitter search tools registered successfully');
-        } else {
-          logger.error('Invalid Twitter search module - missing registration function');
+      // Liste des outils à importer et enregistrer
+      const toolsToRegister = [
+        { 
+          name: 'Twitter search',
+          module: '../tools/twitter-search.js',
+          func: 'registerTwitterSearchTool',
+          registeredTools: ['twitter_search', 'twitter_advanced_search']
+        },
+        { 
+          name: 'Data indexing',
+          module: '../tools/data-indexing.js',
+          func: 'registerDataIndexingTool',
+          registeredTools: ['index_data', 'query_data']
+        },
+        { 
+          name: 'Web scraping',
+          module: '../tools/web-scraping.js',
+          func: 'registerWebScrapingTool',
+          registeredTools: ['web_scrape', 'web_scrape_advanced']
+        },
+        { 
+          name: 'Data analysis',
+          module: '../tools/data-analysis.js',
+          func: 'registerDataAnalysisTool',
+          registeredTools: ['extract_search_terms', 'analyze_tweets', 'similarity_search']
         }
-      } catch (error) {
-        logger.error('Failed to register Twitter search tools:', error);
-      }
+      ];
       
-      // Outil d'indexation de données
-      try {
-        logger.info('Registering data indexing tools...');
-        const dataIndexingModule = await import('../tools/data-indexing.js');
-        if (typeof dataIndexingModule.registerDataIndexingTool === 'function') {
-          dataIndexingModule.registerDataIndexingTool(this.server, masaService);
-          this.registeredTools.push('index_data', 'query_data');
-          logger.info('Data indexing tools registered successfully');
-        } else {
-          logger.error('Invalid data indexing module - missing registration function');
+      // Importer et enregistrer chaque module
+      for (const tool of toolsToRegister) {
+        try {
+          logger.info(`Registering ${tool.name} tools...`);
+          
+          // Tenter d'importer le module
+          const moduleImport = await import(tool.module).catch(error => {
+            logger.error(`Failed to import ${tool.name} module:`, error);
+            return null;
+          });
+          
+          // Vérifier si le module a été importé et contient la fonction d'enregistrement
+          if (moduleImport && typeof moduleImport[tool.func] === 'function') {
+            // Appeler la fonction d'enregistrement
+            moduleImport[tool.func](this.server, masaService);
+            
+            // Ajouter les outils enregistrés à la liste
+            this.registeredTools.push(...tool.registeredTools);
+            
+            logger.info(`${tool.name} tools registered successfully`);
+          } else {
+            logger.error(`Invalid ${tool.name} module - missing registration function or module not found`);
+          }
+        } catch (error) {
+          logger.error(`Failed to register ${tool.name} tools:`, error);
         }
-      } catch (error) {
-        logger.error('Failed to register data indexing tools:', error);
-      }
-      
-      // Outil de scraping web
-      try {
-        logger.info('Registering web scraping tools...');
-        const webScrapingModule = await import('../tools/web-scraping.js');
-        if (typeof webScrapingModule.registerWebScrapingTool === 'function') {
-          webScrapingModule.registerWebScrapingTool(this.server, masaService);
-          this.registeredTools.push('web_scrape', 'web_scrape_advanced');
-          logger.info('Web scraping tools registered successfully');
-        } else {
-          logger.error('Invalid web scraping module - missing registration function');
-        }
-      } catch (error) {
-        logger.error('Failed to register web scraping tools:', error);
-      }
-      
-      // Outil d'analyse de données
-      try {
-        logger.info('Registering data analysis tools...');
-        const dataAnalysisModule = await import('../tools/data-analysis.js');
-        if (typeof dataAnalysisModule.registerDataAnalysisTool === 'function') {
-          dataAnalysisModule.registerDataAnalysisTool(this.server, masaService);
-          this.registeredTools.push('extract_search_terms', 'analyze_tweets', 'similarity_search');
-          logger.info('Data analysis tools registered successfully');
-        } else {
-          logger.error('Invalid data analysis module - missing registration function');
-        }
-      } catch (error) {
-        logger.error('Failed to register data analysis tools:', error);
       }
       
       // Enregistrer les outils Bittensor seulement si Bittensor est activé
       if (isBittensorEnabled()) {
         try {
-          logger.info('Registering Bittensor info tools...');
-          const bittensorInfoModule = await import('../tools/bittensor-info.js');
-          bittensorInfoModule.registerBittensorInfoTool(this.server, bittensorService);
-          this.registeredTools.push('bittensor_info');
-          logger.info('Bittensor info tools registered successfully');
+          const bittensorTools = [
+            { 
+              name: 'Bittensor info',
+              module: '../tools/bittensor-info.js',
+              func: 'registerBittensorInfoTool',
+              registeredTools: ['bittensor_info']
+            },
+            { 
+              name: 'Bittensor search',
+              module: '../tools/bittensor-search.js',
+              func: 'registerBittensorSearchTool',
+              registeredTools: ['bittensor_search']
+            }
+          ];
           
-          logger.info('Registering Bittensor search tools...');
-          const bittensorSearchModule = await import('../tools/bittensor-search.js');
-          bittensorSearchModule.registerBittensorSearchTool(this.server, bittensorService);
-          this.registeredTools.push('bittensor_search');
-          logger.info('Bittensor search tools registered successfully');
+          for (const tool of bittensorTools) {
+            try {
+              logger.info(`Registering ${tool.name} tools...`);
+              
+              const moduleImport = await import(tool.module).catch(error => {
+                logger.error(`Failed to import ${tool.name} module:`, error);
+                return null;
+              });
+              
+              if (moduleImport && typeof moduleImport[tool.func] === 'function') {
+                moduleImport[tool.func](this.server, bittensorService);
+                this.registeredTools.push(...tool.registeredTools);
+                logger.info(`${tool.name} tools registered successfully`);
+              } else {
+                logger.error(`Invalid ${tool.name} module - missing registration function or module not found`);
+              }
+            } catch (error) {
+              logger.error(`Failed to register ${tool.name} tools:`, error);
+            }
+          }
         } catch (error) {
           logger.error('Failed to register Bittensor tools:', error);
         }
@@ -164,10 +182,10 @@ export class MasaSubnetMcpServer {
               content: [{ 
                 type: "text", 
                 text: `Subnet: Masa Subnet 42
-Status: active
-Mode: Twitter API and data indexing only
-
-Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to your .env file to enable it.` 
+  Status: active
+  Mode: Twitter API and data indexing only
+  
+  Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to your .env file to enable it.` 
               }]
             };
           }
