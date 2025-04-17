@@ -105,23 +105,30 @@ export class MasaSubnetMcpServer {
         try {
           logger.info(`Registering ${tool.name} tools...`);
           
-          // Tenter d'importer le module
-          const moduleImport = await import(tool.module).catch(error => {
-            logger.error(`Failed to import ${tool.name} module:`, error);
-            return null;
-          });
+          // Tenter d'importer le module avec gestion des erreurs explicite
+          let moduleImport = null;
+          try {
+            moduleImport = await import(tool.module);
+            logger.debug(`Successfully imported ${tool.name} module`);
+          } catch (importError) {
+            logger.error(`Failed to import ${tool.name} module:`, importError);
+            // Continuer avec la prochaine itération
+            continue;
+          }
           
           // Vérifier si le module a été importé et contient la fonction d'enregistrement
           if (moduleImport && typeof moduleImport[tool.func] === 'function') {
             // Appeler la fonction d'enregistrement
-            moduleImport[tool.func](this.server, masaService);
-            
-            // Ajouter les outils enregistrés à la liste
-            this.registeredTools.push(...tool.registeredTools);
-            
-            logger.info(`${tool.name} tools registered successfully`);
+            try {
+              moduleImport[tool.func](this.server, masaService);
+              // Ajouter les outils enregistrés à la liste
+              this.registeredTools.push(...tool.registeredTools);
+              logger.info(`${tool.name} tools registered successfully`);
+            } catch (registerError) {
+              logger.error(`Error during registration of ${tool.name} tools:`, registerError);
+            }
           } else {
-            logger.error(`Invalid ${tool.name} module - missing registration function or module not found`);
+            logger.error(`Invalid ${tool.name} module - missing registration function`);
           }
         } catch (error) {
           logger.error(`Failed to register ${tool.name} tools:`, error);
@@ -150,17 +157,25 @@ export class MasaSubnetMcpServer {
             try {
               logger.info(`Registering ${tool.name} tools...`);
               
-              const moduleImport = await import(tool.module).catch(error => {
-                logger.error(`Failed to import ${tool.name} module:`, error);
-                return null;
-              });
+              let moduleImport = null;
+              try {
+                moduleImport = await import(tool.module);
+                logger.debug(`Successfully imported ${tool.name} module`);
+              } catch (importError) {
+                logger.error(`Failed to import ${tool.name} module:`, importError);
+                continue;
+              }
               
               if (moduleImport && typeof moduleImport[tool.func] === 'function') {
-                moduleImport[tool.func](this.server, bittensorService);
-                this.registeredTools.push(...tool.registeredTools);
-                logger.info(`${tool.name} tools registered successfully`);
+                try {
+                  moduleImport[tool.func](this.server, bittensorService);
+                  this.registeredTools.push(...tool.registeredTools);
+                  logger.info(`${tool.name} tools registered successfully`);
+                } catch (registerError) {
+                  logger.error(`Error during registration of ${tool.name} tools:`, registerError);
+                }
               } else {
-                logger.error(`Invalid ${tool.name} module - missing registration function or module not found`);
+                logger.error(`Invalid ${tool.name} module - missing registration function`);
               }
             } catch (error) {
               logger.error(`Failed to register ${tool.name} tools:`, error);
