@@ -1,11 +1,22 @@
 // mcp-server.ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { env, isBittensorEnabled } from '../config/env';
+import { env, isBittensorEnabled, MasaMode } from '../config/env';
 import logger from '../utils/logger';
 import { MasaServiceFactory } from '../services/masa-service';
 import { BittensorServiceFactory } from '../services/bittensor-service';
 import { TransportFactory } from './transport.js';
 import path from 'path';
+
+/**
+ * Définition d'un outil MCP avec métadonnées de disponibilité par mode
+ */
+interface ToolDefinition {
+  name: string;
+  module: string;
+  func: string;
+  registeredTools: string[];
+  supportedModes: MasaMode[]; // Les modes dans lesquels cet outil est disponible
+}
 
 /**
  * Classe du serveur MCP pour Masa Subnet 42
@@ -16,8 +27,11 @@ export class MasaSubnetMcpServer {
   private transport: any;
   private registeredTools: string[] = []; // Pour suivre les outils enregistrés
   private registeredResources: string[] = []; // Pour suivre les ressources enregistrées
+  private currentMode: MasaMode;
   
   constructor() {
+    this.currentMode = env.MASA_MODE;
+    
     // Créer une instance du serveur MCP
     this.server = new McpServer({
       name: env.MCP_SERVER_NAME,
@@ -25,7 +39,7 @@ export class MasaSubnetMcpServer {
       description: env.MCP_SERVER_DESCRIPTION
     });
     
-    logger.info(`Created MCP server: ${env.MCP_SERVER_NAME} v${env.MCP_SERVER_VERSION}`);
+    logger.info(`Created MCP server: ${env.MCP_SERVER_NAME} v${env.MCP_SERVER_VERSION} in ${this.currentMode} mode`);
     
     // Ajouter un gestionnaire global pour les rejets de promesse non gérés
     process.on('unhandledRejection', (reason, promise) => {
@@ -39,8 +53,8 @@ export class MasaSubnetMcpServer {
   async initialize(): Promise<void> {
     try {
       // Créer le service Masa approprié en fonction du mode configuré
-      const masaService = await MasaServiceFactory.createService(env.MASA_MODE);
-      logger.info(`Masa service created in ${env.MASA_MODE} mode`);
+      const masaService = await MasaServiceFactory.createService(this.currentMode);
+      logger.info(`Masa service created in ${this.currentMode} mode`);
       
       // Créer le service Bittensor
       const bittensorService = await BittensorServiceFactory.createService();
@@ -64,44 +78,97 @@ export class MasaSubnetMcpServer {
   }
   
   /**
+   * Détermine si un outil est disponible dans le mode actuel
+   * @param supportedModes Liste des modes supportés par l'outil
+   * @returns Vrai si l'outil est disponible dans le mode actuel
+   */
+  private isToolAvailableInCurrentMode(supportedModes: MasaMode[]): boolean {
+    // Si aucun mode n'est spécifié, on considère que l'outil est disponible dans tous les modes
+    if (!supportedModes || supportedModes.length === 0) {
+      return true;
+    }
+    
+    // Vérifier si le mode actuel est dans la liste des modes supportés
+    return supportedModes.includes(this.currentMode);
+  }
+  
+  /**
    * Enregistre les outils MCP
    * @param masaService Service Masa à utiliser
    * @param bittensorService Service Bittensor à utiliser
    */
   private async registerTools(masaService: any, bittensorService: any): Promise<void> {
     try {
-      logger.info('Starting tools registration...');
+      logger.info(`Starting tools registration for ${this.currentMode} mode...`);
       
-      // Liste des outils à importer et enregistrer
-      const toolsToRegister = [
+      // Liste des outils à importer et enregistrer avec leurs modes supportés
+      const toolsToRegister: ToolDefinition[] = [
         { 
-          name: 'Twitter search',
+          name: 'Twitter search basic',
           module: '../tools/twitter-search.js',
           func: 'registerTwitterSearchTool',
-          registeredTools: ['twitter_search', 'twitter_advanced_search']
+          registeredTools: ['twitter_search'],
+          supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
+        },
+        { 
+          name: 'Twitter search advanced',
+          module: '../tools/twitter-search.js',
+          func: 'registerTwitterAdvancedSearchTool',
+          registeredTools: ['twitter_advanced_search'],
+          supportedModes: ['PROTOCOL'] // Uniquement disponible en mode PROTOCOL
         },
         { 
           name: 'Data indexing',
           module: '../tools/data-indexing.js',
           func: 'registerDataIndexingTool',
-          registeredTools: ['index_data', 'query_data']
+          registeredTools: ['index_data', 'query_data'],
+          supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
         },
         { 
-          name: 'Web scraping',
+          name: 'Web scraping basic',
           module: '../tools/web-scraping.js',
           func: 'registerWebScrapingTool',
-          registeredTools: ['web_scrape', 'web_scrape_advanced']
+          registeredTools: ['web_scrape'],
+          supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
         },
         { 
-          name: 'Data analysis',
+          name: 'Web scraping advanced',
+          module: '../tools/web-scraping.js',
+          func: 'registerAdvancedWebScrapingTool',
+          registeredTools: ['web_scrape_advanced'],
+          supportedModes: ['PROTOCOL'] // Uniquement disponible en mode PROTOCOL
+        },
+        { 
+          name: 'Term extraction',
           module: '../tools/data-analysis.js',
-          func: 'registerDataAnalysisTool',
-          registeredTools: ['extract_search_terms', 'analyze_tweets', 'similarity_search']
+          func: 'registerTermExtractionTool',
+          registeredTools: ['extract_search_terms'],
+          supportedModes: ['API'] // Uniquement disponible en mode API
+        },
+        { 
+          name: 'Tweet analysis',
+          module: '../tools/data-analysis.js',
+          func: 'registerTweetAnalysisTool',
+          registeredTools: ['analyze_tweets'],
+          supportedModes: ['API'] // Uniquement disponible en mode API
+        },
+        { 
+          name: 'Similarity search',
+          module: '../tools/data-analysis.js',
+          func: 'registerSimilaritySearchTool',
+          registeredTools: ['similarity_search'],
+          supportedModes: ['API'] // Uniquement disponible en mode API
         }
       ];
       
-      // Importer et enregistrer chaque module
+      // Importer et enregistrer chaque module si disponible dans le mode actuel
       for (const tool of toolsToRegister) {
+        // Vérifier si l'outil est disponible dans le mode actuel
+        if (!this.isToolAvailableInCurrentMode(tool.supportedModes)) {
+          logger.info(`Skipping ${tool.name} as it's not available in ${this.currentMode} mode`);
+          continue;
+        }
+        
         try {
           logger.info(`Registering ${tool.name} tools...`);
           
@@ -138,22 +205,30 @@ export class MasaSubnetMcpServer {
       // Enregistrer les outils Bittensor seulement si Bittensor est activé
       if (isBittensorEnabled()) {
         try {
-          const bittensorTools = [
+          const bittensorTools: ToolDefinition[] = [
             { 
               name: 'Bittensor info',
               module: '../tools/bittensor-info.js',
               func: 'registerBittensorInfoTool',
-              registeredTools: ['bittensor_info']
+              registeredTools: ['bittensor_info'],
+              supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
             },
             { 
               name: 'Bittensor search',
               module: '../tools/bittensor-search.js',
               func: 'registerBittensorSearchTool',
-              registeredTools: ['bittensor_search']
+              registeredTools: ['bittensor_search'],
+              supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
             }
           ];
           
           for (const tool of bittensorTools) {
+            // Vérifier si l'outil est disponible dans le mode actuel
+            if (!this.isToolAvailableInCurrentMode(tool.supportedModes)) {
+              logger.info(`Skipping ${tool.name} as it's not available in ${this.currentMode} mode`);
+              continue;
+            }
+            
             try {
               logger.info(`Registering ${tool.name} tools...`);
               
@@ -197,10 +272,10 @@ export class MasaSubnetMcpServer {
               content: [{ 
                 type: "text", 
                 text: `Subnet: Masa Subnet 42
-  Status: active
-  Mode: Twitter API and data indexing only
+Status: active
+Mode: ${this.currentMode}
   
-  Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to your .env file to enable it.` 
+Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to your .env file to enable it.` 
               }]
             };
           }
@@ -305,14 +380,14 @@ export class MasaSubnetMcpServer {
         logger.info('MCP server is ready to accept connections via SSE');
         
         // Utiliser sendUserMessage pour afficher le message sans perturber la communication JSON
-        TransportFactory.sendUserMessage('Masa Subnet 42 MCP Server started with HTTP transport. Press Ctrl+C to stop.');
+        TransportFactory.sendUserMessage(`Masa Subnet 42 MCP Server started with HTTP transport in ${this.currentMode} mode. Press Ctrl+C to stop.`);
       } else {
         // Pour les autres transports (stdio), connecter directement
         this.server.connect(this.transport);
         logger.info('MCP server started with stdio transport');
         
         // Utiliser sendUserMessage pour afficher le message sans perturber la communication JSON
-        TransportFactory.sendUserMessage('Masa Subnet 42 MCP Server started with stdio transport. Press Ctrl+C to stop.');
+        TransportFactory.sendUserMessage(`Masa Subnet 42 MCP Server started with stdio transport in ${this.currentMode} mode. Press Ctrl+C to stop.`);
       }
     } catch (error) {
       logger.error('Failed to start MCP server:', error);

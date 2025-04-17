@@ -1,273 +1,225 @@
+// web-scraping.js
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
 import { MasaService } from '../services/masa-service';
+import { z } from 'zod';
 import logger from '../utils/logger';
+import { env } from '../config/env';
+import { WebScrapeRequest } from '../types';
 
 /**
- * Enregistre l'outil de scraping web dans le serveur MCP
+ * Enregistre l'outil de scraping web basique (compatible API et PROTOCOL)
  * @param server Instance du serveur MCP
  * @param masaService Service Masa à utiliser
  */
-export function registerWebScrapingTool(
-  server: McpServer,
-  masaService: MasaService
-): void {
-  // Outil de scraping web simple
+export function registerWebScrapingTool(server: McpServer, masaService: MasaService): void {
   server.tool(
     'web_scrape',
     {
-      url: z.string().url('URL must be valid'),
-      format: z.enum(['text', 'html', 'json']).optional()
+      url: z.string().describe('URL de la page web à scraper'),
+      format: z.enum(['text', 'html']).default('text').optional().describe('Format du contenu à extraire')
     },
-    async (params) => {
+    async ({ url, format = 'text' }) => {
       try {
-        const { url, format } = params;
+        logger.info(`Scraping web page: ${url} in ${format} format`);
         
-        logger.info(`Executing web scraping: ${url}`);
+        // Vérifier que l'URL est valide
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://' + url;
+        }
         
-        // Construire la requête
-        const request = {
-          url,
-          format: format || 'text'
-        };
+        // Adapter la requête en fonction du mode
+        let requestOptions: WebScrapeRequest;
         
-        // Exécuter le scraping
-        const result = await masaService.scrapeWeb(request);
-        
-        // Vérifier s'il y a une erreur
-        if (result.error) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `Error scraping web page: ${result.error}` 
-            }],
-            isError: true
+        if (env.MASA_MODE === 'API') {
+          // En mode API, nous utilisons format pour spécifier la sortie
+          requestOptions = {
+            url,
+            format
+          };
+        } else {
+          // En mode PROTOCOL, nous utilisons depth=1 par défaut
+          requestOptions = {
+            url,
+            depth: 1
           };
         }
         
-        // Si pas de contenu, retourner un message approprié
-        if (!result.content) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `No content found for URL: ${url}` 
+        // Effectuer le scraping
+        const scrapeResult = await masaService.scrapeWeb(requestOptions);
+        
+        // Vérifier si une erreur s'est produite
+        if (scrapeResult.error) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Error scraping web page: ${scrapeResult.error}`
             }]
           };
         }
         
-        // Formatage du contenu
-        const title = result.title ? `# ${result.title}\n\n` : '';
-        const contentSummary = `Content length: ${result.content.length} characters`;
+        // Formater la réponse
+        const title = scrapeResult.title || 'Web Page Content';
+        const content = scrapeResult.content || '';
         
-        // Limiter la taille du contenu pour éviter les problèmes de taille
-        let contentPreview = result.content;
-        if (contentPreview.length > 2000) {
-          contentPreview = contentPreview.substring(0, 2000) + '... [content truncated, total length: ' + result.content.length + ' characters]';
+        // Limiter la taille du contenu si nécessaire
+        const MAX_CONTENT_SIZE = 50000; // ~50 KB limit
+        let displayContent = content;
+        
+        if (content.length > MAX_CONTENT_SIZE) {
+          displayContent = content.substring(0, MAX_CONTENT_SIZE) + 
+            '\n\n... [Content truncated due to size limitations] ...';
         }
         
-        // Formatage des métadonnées
-        const metadata = result.metadata && Object.keys(result.metadata).length > 0
-          ? `\n\n## Metadata\n\n${JSON.stringify(result.metadata, null, 2)}`
-          : '';
+        // Ajouter des métadonnées si disponibles
+        let metadataSection = '';
+        if (scrapeResult.metadata && Object.keys(scrapeResult.metadata).length > 0) {
+          metadataSection = '\n\n## Metadata\n';
+          
+          for (const [key, value] of Object.entries(scrapeResult.metadata)) {
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+              metadataSection += `- ${key}: ${value}\n`;
+            }
+          }
+        }
         
-        // Retourner le contenu formaté
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `${title}Source: ${url}\n${contentSummary}\n\n${contentPreview}${metadata}` 
+        return {
+          content: [{
+            type: 'text',
+            text: `# ${title}\n\nSource: ${url}${metadataSection}\n\n## Content\n\n${displayContent}`
           }]
         };
       } catch (error) {
         logger.error('Error in web_scrape tool:', error);
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `Error scraping web page: ${error instanceof Error ? error.message : 'Unknown error'}` 
-          }],
-          isError: true
+        
+        return {
+          isError: true,
+          content: [{
+            type: 'text',
+            text: `Error scraping web page: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }]
         };
       }
     }
   );
   
-  // Outil de scraping web avancé
+  logger.info('Web scraping tool registered successfully');
+}
+
+/**
+ * Enregistre l'outil de scraping web avancé (uniquement compatible PROTOCOL)
+ * @param server Instance du serveur MCP
+ * @param masaService Service Masa à utiliser
+ */
+export function registerAdvancedWebScrapingTool(server: McpServer, masaService: MasaService): void {
+  // Vérifier que nous sommes en mode PROTOCOL
+  if (env.MASA_MODE !== 'PROTOCOL') {
+    logger.warn('Advanced web scraping tool is only available in PROTOCOL mode');
+    return;
+  }
+  
   server.tool(
     'web_scrape_advanced',
     {
-      url: z.string().url('URL must be valid'),
-      depth: z.number().min(1).max(3).optional(),
-      extractImages: z.boolean().optional(),
-      extractLinks: z.boolean().optional(),
-      selector: z.string().optional()
+      url: z.string().describe('URL de la page web à scraper'),
+      depth: z.number().min(1).max(3).default(1).optional().describe('Profondeur d\'exploration (1-3)'),
+      extractLinks: z.boolean().default(false).optional().describe('Extraire les liens de la page')
     },
-    async (params) => {
+    async ({ url, depth = 1, extractLinks = false }) => {
       try {
-        const { url, depth, extractImages, extractLinks, selector } = params;
+        logger.info(`Advanced scraping web page: ${url} with depth ${depth}`);
         
-        logger.info(`Executing advanced web scraping: ${url}`);
-        
-        // Construire la requête
-        const request = {
-          url,
-          depth: depth || 1,
-          format: 'html' as 'text' | 'html' | 'json' // Le format HTML permet d'extraire plus d'informations
-        };
-        
-        // Exécuter le scraping
-        const result = await masaService.scrapeWeb(request);
-        
-        // Vérifier s'il y a une erreur
-        if (result.error) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `Error scraping web page: ${result.error}` 
-            }],
-            isError: true
-          };
+        // Vérifier que l'URL est valide
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://' + url;
         }
         
-        // Si pas de contenu, retourner un message approprié
-        if (!result.content) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `No content found for URL: ${url}` 
+        // Effectuer le scraping avancé
+        const scrapeResult = await masaService.scrapeWeb({
+          url,
+          depth
+        });
+        
+        // Vérifier si une erreur s'est produite
+        if (scrapeResult.error) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Error in advanced web scraping: ${scrapeResult.error}`
             }]
           };
         }
         
-        // Préparation du résultat
-        let formattedResult = `# ${result.title || url}\n\n`;
-        formattedResult += `Source: ${url}\n`;
-        formattedResult += `Content length: ${result.content.length} characters\n\n`;
+        // Formater la réponse
+        const title = scrapeResult.title || 'Web Page Content';
+        const content = scrapeResult.content || '';
         
-        // Limiter la taille du contenu pour éviter les problèmes de taille
-        let contentPreview = result.content;
-        if (contentPreview.length > 2000) {
-          contentPreview = contentPreview.substring(0, 2000) + '... [content truncated]';
+        // Limiter la taille du contenu si nécessaire
+        const MAX_CONTENT_SIZE = 50000; // ~50 KB limit
+        let displayContent = content;
+        
+        if (content.length > MAX_CONTENT_SIZE) {
+          displayContent = content.substring(0, MAX_CONTENT_SIZE) + 
+            '\n\n... [Content truncated due to size limitations] ...';
         }
         
-        formattedResult += contentPreview + '\n\n';
-        
-        // Ajouter les métadonnées
-        if (result.metadata && Object.keys(result.metadata).length > 0) {
-          formattedResult += `## Metadata\n\n${JSON.stringify(result.metadata, null, 2)}\n\n`;
-        }
-        
-        // Extraction d'informations supplémentaires si demandé
-        // Note: cette partie est simulée car l'API ne fournit pas directement ces fonctionnalités
+        // Extraire les liens si demandé
+        let linksSection = '';
         if (extractLinks) {
-          const links = extractLinksFromHTML(result.content);
+          // Extraction basique des liens avec une expression régulière
+          const linkRegex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"/gi;
+          const links = [];
+          let match;
+          
+          while ((match = linkRegex.exec(content)) !== null) {
+            links.push(match[1]);
+          }
+          
           if (links.length > 0) {
-            formattedResult += `## Links (${links.length})\n\n`;
-            links.slice(0, 20).forEach(link => {
-              formattedResult += `- [${link.text || link.url}](${link.url})\n`;
+            linksSection = '\n\n## Links Found\n';
+            const uniqueLinks = [...new Set(links)]; // Éliminer les doublons
+            uniqueLinks.slice(0, 50).forEach(link => { // Limiter à 50 liens
+              linksSection += `- ${link}\n`;
             });
-            if (links.length > 20) {
-              formattedResult += `... and ${links.length - 20} more links\n`;
+            
+            if (uniqueLinks.length > 50) {
+              linksSection += `\n... [${uniqueLinks.length - 50} more links not shown] ...`;
             }
-            formattedResult += '\n';
           }
         }
         
-        if (extractImages) {
-          const images = extractImagesFromHTML(result.content);
-          if (images.length > 0) {
-            formattedResult += `## Images (${images.length})\n\n`;
-            images.slice(0, 10).forEach(image => {
-              formattedResult += `- ![${image.alt || 'Image'}](${image.src})\n`;
-            });
-            if (images.length > 10) {
-              formattedResult += `... and ${images.length - 10} more images\n`;
+        // Ajouter des métadonnées si disponibles
+        let metadataSection = '';
+        if (scrapeResult.metadata && Object.keys(scrapeResult.metadata).length > 0) {
+          metadataSection = '\n\n## Metadata\n';
+          
+          for (const [key, value] of Object.entries(scrapeResult.metadata)) {
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+              metadataSection += `- ${key}: ${value}\n`;
             }
-            formattedResult += '\n';
           }
         }
         
-        // Retourner le contenu formaté
-        return { 
-          content: [{ 
-            type: "text", 
-            text: formattedResult 
+        return {
+          content: [{
+            type: 'text',
+            text: `# ${title}\n\nSource: ${url}\nDepth: ${depth}${metadataSection}${linksSection}\n\n## Content\n\n${displayContent}`
           }]
         };
       } catch (error) {
         logger.error('Error in web_scrape_advanced tool:', error);
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `Error with advanced web scraping: ${error instanceof Error ? error.message : 'Unknown error'}` 
-          }],
-          isError: true
+        
+        return {
+          isError: true,
+          content: [{
+            type: 'text',
+            text: `Error in advanced web scraping: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }]
         };
       }
     }
   );
   
-  logger.info('Web scraping tools registered');
-}
-
-/**
- * Fonctions utilitaires pour extraire des informations du HTML
- * Note: Ces fonctions sont basiques et servent principalement d'illustration
- */
-
-// Fonction pour extraire des liens d'un contenu HTML
-function extractLinksFromHTML(html: string): Array<{url: string; text?: string}> {
-  try {
-    const links: Array<{url: string; text?: string}> = [];
-    
-    // Extraction basique avec regex (simplifié pour l'exemple)
-    // Note: dans un cas réel, il serait préférable d'utiliser une bibliothèque comme cheerio
-    const linkMatches = html.match(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"(?:[^>]*?)>([^<]*)<\/a>/gi);
-    
-    if (linkMatches) {
-      linkMatches.forEach(match => {
-        const hrefMatch = match.match(/href="([^"]*)"/i);
-        const textMatch = match.match(/>([^<]*)</i);
-        
-        if (hrefMatch && hrefMatch[1]) {
-          const url = hrefMatch[1];
-          const text = textMatch && textMatch[1] ? textMatch[1].trim() : undefined;
-          
-          links.push({ url, text });
-        }
-      });
-    }
-    
-    return links;
-  } catch (error) {
-    logger.error('Error extracting links:', error);
-    return [];
-  }
-}
-
-// Fonction pour extraire des images d'un contenu HTML
-function extractImagesFromHTML(html: string): Array<{src: string; alt?: string}> {
-  try {
-    const images: Array<{src: string; alt?: string}> = [];
-    
-    // Extraction basique avec regex (simplifié pour l'exemple)
-    const imageMatches = html.match(/<img\s+[^>]*?src="([^"]*)"[^>]*?>/gi);
-    
-    if (imageMatches) {
-      imageMatches.forEach(match => {
-        const srcMatch = match.match(/src="([^"]*)"/i);
-        const altMatch = match.match(/alt="([^"]*)"/i);
-        
-        if (srcMatch && srcMatch[1]) {
-          const src = srcMatch[1];
-          const alt = altMatch && altMatch[1] ? altMatch[1].trim() : undefined;
-          
-          images.push({ src, alt });
-        }
-      });
-    }
-    
-    return images;
-  } catch (error) {
-    logger.error('Error extracting images:', error);
-    return [];
-  }
+  logger.info('Advanced web scraping tool registered successfully');
 }

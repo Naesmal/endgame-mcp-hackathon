@@ -1,280 +1,280 @@
+// data-analysis.js
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import * as z from 'zod';
 import { MasaService } from '../services/masa-service';
+import { z } from 'zod';
 import logger from '../utils/logger';
+import { env } from '../config/env';
 
 /**
- * Enregistre l'outil d'analyse de données dans le serveur MCP
+ * Enregistre l'outil d'extraction de termes de recherche (uniquement compatible API)
  * @param server Instance du serveur MCP
  * @param masaService Service Masa à utiliser
  */
-export function registerDataAnalysisTool(
-  server: McpServer,
-  masaService: MasaService
-): void {
-  // Outil d'extraction de termes de recherche
+export function registerTermExtractionTool(server: McpServer, masaService: MasaService): void {
+  // Vérifier que nous sommes en mode API
+  if (env.MASA_MODE !== 'API') {
+    logger.warn('Term extraction tool is only available in API mode');
+    return;
+  }
+  
   server.tool(
     'extract_search_terms',
     {
-      userInput: z.string().min(3, 'User input must have at least 3 characters'),
-      count: z.number().min(1).max(10).optional()
+      userInput: z.string().describe('Prompt utilisateur décrivant ce qu\'il recherche'),
+      count: z.number().min(1).max(10).default(3).optional().describe('Nombre de termes à extraire')
     },
-    async (params) => {
+    async ({ userInput, count = 3 }) => {
       try {
-        const { userInput, count } = params;
+        logger.info(`Extracting search terms from: "${userInput}"`);
         
-        logger.info(`Extracting search terms from: ${userInput}`);
-        
-        // Construire la requête
-        const request = {
+        // Appeler le service d'extraction
+        const extractionResult = await masaService.extractSearchTerms({
           userInput,
-          count: count || 3
-        };
+          count
+        });
         
-        // Exécuter l'extraction
-        const result = await masaService.extractSearchTerms(request);
-        
-        // Vérifier s'il y a une erreur
-        if (result.error) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `Error extracting search terms: ${result.error}` 
-            }],
-            isError: true
-          };
-        }
-        
-        // Si pas de termes, retourner un message approprié
-        if (!result.searchTerms || result.searchTerms.length === 0) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `No search terms could be extracted from: "${userInput}"` 
+        // Vérifier si une erreur s'est produite
+        if (extractionResult.error) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Error extracting search terms: ${extractionResult.error}`
             }]
           };
         }
         
-        // Formater le résultat
-        let formattedResult = `# Search Terms Extracted\n\n`;
-        formattedResult += `Original input: "${userInput}"\n\n`;
-        formattedResult += `## Terms\n\n`;
+        // Formater les résultats
+        const searchTerms = extractionResult.searchTerms || [];
+        const thinking = extractionResult.thinking || '';
         
-        result.searchTerms.forEach((term, index) => {
-          formattedResult += `${index + 1}. **${term}**\n`;
-        });
-        
-        if (result.thinking) {
-          formattedResult += `\n## AI Thinking\n\n${result.thinking}\n`;
+        if (searchTerms.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: `Could not extract any search terms from: "${userInput}"`
+            }]
+          };
         }
         
-        // Retourner le contenu formaté
-        return { 
-          content: [{ 
-            type: "text", 
-            text: formattedResult 
+        // Construire la réponse
+        let response = `## Search Terms Extracted\n\n`;
+        
+        searchTerms.forEach((term, index) => {
+          response += `${index + 1}. "${term}"\n`;
+        });
+        
+        if (thinking) {
+          response += `\n## Thinking Process\n\n${thinking}\n`;
+        }
+        
+        response += `\nThese terms can be used for Twitter searches or data queries.`;
+        
+        return {
+          content: [{
+            type: 'text',
+            text: response
           }]
         };
       } catch (error) {
         logger.error('Error in extract_search_terms tool:', error);
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `Error extracting search terms: ${error instanceof Error ? error.message : 'Unknown error'}` 
-          }],
-          isError: true
+        
+        return {
+          isError: true,
+          content: [{
+            type: 'text',
+            text: `Error extracting search terms: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }]
         };
       }
     }
   );
   
-  // Outil d'analyse de tweets
+  logger.info('Term extraction tool registered successfully');
+}
+
+/**
+ * Enregistre l'outil d'analyse de tweets (uniquement compatible API)
+ * @param server Instance du serveur MCP
+ * @param masaService Service Masa à utiliser
+ */
+export function registerTweetAnalysisTool(server: McpServer, masaService: MasaService): void {
+  // Vérifier que nous sommes en mode API
+  if (env.MASA_MODE !== 'API') {
+    logger.warn('Tweet analysis tool is only available in API mode');
+    return;
+  }
+  
   server.tool(
     'analyze_tweets',
     {
-      tweets: z.union([z.string(), z.array(z.string())]),
-      prompt: z.string().min(5, 'Analysis prompt must have at least 5 characters')
+      tweets: z.union([z.string(), z.array(z.string())]).describe('Tweet(s) à analyser (texte ou tableau)'),
+      prompt: z.string().describe('Prompt d\'analyse personnalisé')
     },
-    async (params) => {
+    async ({ tweets, prompt }) => {
       try {
-        const { tweets, prompt } = params;
+        logger.info(`Analyzing tweets with prompt: "${prompt}"`);
         
-        logger.info(`Analyzing tweets with prompt: ${prompt}`);
+        // Normaliser les tweets pour que ce soit toujours un tableau
+        const tweetsArray = Array.isArray(tweets) ? tweets : [tweets];
         
-        // Convertir les tweets en tableau si ce n'est pas déjà le cas
-        const tweetArray = Array.isArray(tweets) ? tweets : [tweets];
-        
-        // Si aucun tweet, retourner un message d'erreur
-        if (tweetArray.length === 0) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: "No tweets provided for analysis" 
-            }],
-            isError: true
-          };
-        }
-        
-        // Construire la requête
-        const request = {
-          tweets: tweetArray,
-          prompt
-        };
-        
-        // Exécuter l'analyse
-        const result = await masaService.analyzeData(request);
-        
-        // Vérifier s'il y a une erreur
-        if (result.error) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `Error analyzing tweets: ${result.error}` 
-            }],
-            isError: true
-          };
-        }
-        
-        // Si pas de résultat, retourner un message approprié
-        if (!result.result) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: "Analysis completed but no results were returned" 
+        // Vérifier qu'il y a des tweets à analyser
+        if (tweetsArray.length === 0) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Error: No tweets provided for analysis`
             }]
           };
         }
         
-        // Formater le résultat
-        let formattedResult = `# Tweet Analysis\n\n`;
-        formattedResult += `Analysis prompt: "${prompt}"\n\n`;
-        formattedResult += `Analyzed ${tweetArray.length} tweet${tweetArray.length > 1 ? 's' : ''}\n\n`;
-        formattedResult += `## Analysis Results\n\n${result.result}\n\n`;
-        
-        // Ajouter quelques tweets d'exemple
-        formattedResult += `## Sample Tweets\n\n`;
-        tweetArray.slice(0, 5).forEach((tweet, index) => {
-          formattedResult += `### Tweet ${index + 1}\n\n${tweet}\n\n`;
+        // Appeler le service d'analyse
+        const analysisResult = await masaService.analyzeData({
+          tweets: tweetsArray,
+          prompt
         });
         
-        if (tweetArray.length > 5) {
-          formattedResult += `... and ${tweetArray.length - 5} more tweets\n`;
+        // Vérifier si une erreur s'est produite
+        if (analysisResult.error) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Error analyzing tweets: ${analysisResult.error}`
+            }]
+          };
         }
         
-        // Retourner le contenu formaté
-        return { 
-          content: [{ 
-            type: "text", 
-            text: formattedResult 
+        // Formatage des tweets pour le contexte
+        const tweetContext = tweetsArray.map((tweet, index) => 
+          `Tweet ${index + 1}: "${tweet}"`
+        ).join('\n\n');
+        
+        // Construire la réponse
+        const response = `## Tweet Analysis\n\n${analysisResult.result}\n\n## Analyzed Content\n\n${tweetContext}`;
+        
+        return {
+          content: [{
+            type: 'text',
+            text: response
           }]
         };
       } catch (error) {
         logger.error('Error in analyze_tweets tool:', error);
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `Error analyzing tweets: ${error instanceof Error ? error.message : 'Unknown error'}` 
-          }],
-          isError: true
+        
+        return {
+          isError: true,
+          content: [{
+            type: 'text',
+            text: `Error analyzing tweets: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }]
         };
       }
     }
   );
   
-  // Outil de recherche par similarité
+  logger.info('Tweet analysis tool registered successfully');
+}
+
+/**
+ * Enregistre l'outil de recherche par similarité (uniquement compatible API)
+ * @param server Instance du serveur MCP
+ * @param masaService Service Masa à utiliser
+ */
+export function registerSimilaritySearchTool(server: McpServer, masaService: MasaService): void {
+  // Vérifier que nous sommes en mode API
+  if (env.MASA_MODE !== 'API') {
+    logger.warn('Similarity search tool is only available in API mode');
+    return;
+  }
+  
   server.tool(
     'similarity_search',
     {
-      query: z.string().min(1, 'Query is required'),
-      keywords: z.array(z.string()).optional(),
-      maxResults: z.number().min(1).max(100).optional(),
-      namespace: z.string().optional()
+      query: z.string().describe('Requête sémantique'),
+      keywords: z.array(z.string()).optional().describe('Mots-clés additionnels (optionnel)'),
+      maxResults: z.number().min(1).max(100).default(10).optional().describe('Nombre maximum de résultats'),
+      namespace: z.enum(['twitter', 'bittensor']).default('twitter').optional().describe('Espace de données à interroger')
     },
-    async (params) => {
+    async ({ query, keywords, maxResults = 10, namespace = 'twitter' }) => {
       try {
-        const { query, keywords, maxResults, namespace } = params;
+        logger.info(`Performing similarity search for: "${query}" in namespace ${namespace}`);
         
-        logger.info(`Performing similarity search: ${query}`);
-        
-        // Construire la requête
-        const request = {
+        // Appeler le service de recherche par similarité
+        const searchResult = await masaService.searchBySimilarity({
           query,
           keywords,
-          maxResults: maxResults || 10,
+          maxResults,
           namespace
-        };
+        });
         
-        // Exécuter la recherche
-        const result = await masaService.searchBySimilarity(request);
-        
-        // Vérifier s'il y a une erreur
-        if (result.error) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `Error in similarity search: ${result.error}` 
-            }],
-            isError: true
-          };
-        }
-        
-        // Si aucun résultat, retourner un message approprié
-        if (!result.results || result.results.length === 0) {
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `No results found for similarity search: "${query}"` 
+        // Vérifier si une erreur s'est produite
+        if (searchResult.error) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Error in similarity search: ${searchResult.error}`
             }]
           };
         }
         
-        // Formater le résultat
-        let formattedResult = `# Similarity Search Results\n\n`;
-        formattedResult += `Query: "${query}"\n`;
-        
-        if (keywords && keywords.length > 0) {
-          formattedResult += `Keywords: ${keywords.join(', ')}\n`;
+        // Vérifier s'il y a des résultats
+        if (searchResult.results.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: `No results found for semantic query: "${query}" in namespace "${namespace}"`
+            }]
+          };
         }
         
-        formattedResult += `Namespace: ${namespace || 'twitter'}\n`;
-        formattedResult += `Found ${result.results.length} of ${result.total} total results\n\n`;
-        formattedResult += `## Results\n\n`;
+        // Formater les résultats
+        let response = `## Semantic Search Results\n\nQuery: "${query}"\nNamespace: ${namespace}\n\n`;
         
-        // Formater chaque résultat
-        result.results.forEach((item, index) => {
-          formattedResult += `### Result ${index + 1} (Similarity: ${(item.similarity * 100).toFixed(1)}%)\n\n`;
-          formattedResult += `${item.text}\n\n`;
+        // Ajouter les résultats
+        searchResult.results.forEach((result, index) => {
+          // Formater le score de similarité
+          const similarityScore = result.similarity.toFixed(2);
           
-          // Ajouter des métadonnées supplémentaires si disponibles
-          const metadata = [];
-          if (item.id) metadata.push(`ID: ${item.id}`);
-          if (item.username) metadata.push(`Username: ${item.username}`);
-          if (item.date) metadata.push(`Date: ${item.date}`);
+          response += `### Result ${index + 1} (Score: ${similarityScore})\n`;
           
-          if (metadata.length > 0) {
-            formattedResult += `*${metadata.join(' | ')}*\n\n`;
+          // Ajouter l'ID si disponible
+          if (result.id) {
+            response += `ID: ${result.id}\n\n`;
           }
+          
+          // Ajouter le texte
+          response += `${result.text}\n\n`;
         });
         
-        // Retourner le contenu formaté
-        return { 
-          content: [{ 
-            type: "text", 
-            text: formattedResult 
+        // Ajouter les informations sur le nombre total
+        const totalMessage = searchResult.total > searchResult.results.length
+          ? `Showing ${searchResult.results.length} out of ${searchResult.total} total matches.`
+          : `Found ${searchResult.total} matches.`;
+        
+        response += `---\n${totalMessage}`;
+        
+        return {
+          content: [{
+            type: 'text',
+            text: response
           }]
         };
       } catch (error) {
         logger.error('Error in similarity_search tool:', error);
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `Error performing similarity search: ${error instanceof Error ? error.message : 'Unknown error'}` 
-          }],
-          isError: true
+        
+        return {
+          isError: true,
+          content: [{
+            type: 'text',
+            text: `Error in similarity search: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }]
         };
       }
     }
   );
   
-  logger.info('Data analysis tools registered');
+  logger.info('Similarity search tool registered successfully');
 }
