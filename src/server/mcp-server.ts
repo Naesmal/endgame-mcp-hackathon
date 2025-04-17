@@ -1,9 +1,11 @@
+// mcp-server.ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { env, isBittensorEnabled } from '../config/env';
 import logger from '../utils/logger';
 import { MasaServiceFactory } from '../services/masa-service';
 import { BittensorServiceFactory } from '../services/bittensor-service';
 import { TransportFactory } from './transport.js';
+import path from 'path';
 
 /**
  * Classe du serveur MCP pour Masa Subnet 42
@@ -12,6 +14,8 @@ import { TransportFactory } from './transport.js';
 export class MasaSubnetMcpServer {
   private server: McpServer;
   private transport: any;
+  private registeredTools: string[] = []; // Pour suivre les outils enregistrés
+  private registeredResources: string[] = []; // Pour suivre les ressources enregistrées
   
   constructor() {
     // Créer une instance du serveur MCP
@@ -22,6 +26,11 @@ export class MasaSubnetMcpServer {
     });
     
     logger.info(`Created MCP server: ${env.MCP_SERVER_NAME} v${env.MCP_SERVER_VERSION}`);
+    
+    // Ajouter un gestionnaire global pour les rejets de promesse non gérés
+    process.on('unhandledRejection', (reason, promise) => {
+      logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    });
   }
   
   /**
@@ -31,6 +40,7 @@ export class MasaSubnetMcpServer {
     try {
       // Créer le service Masa approprié en fonction du mode configuré
       const masaService = await MasaServiceFactory.createService(env.MASA_MODE);
+      logger.info(`Masa service created in ${env.MASA_MODE} mode`);
       
       // Créer le service Bittensor
       const bittensorService = await BittensorServiceFactory.createService();
@@ -60,34 +70,90 @@ export class MasaSubnetMcpServer {
    */
   private async registerTools(masaService: any, bittensorService: any): Promise<void> {
     try {
-      // Importer et enregistrer l'outil de recherche Twitter
-      const { registerTwitterSearchTool } = await import('../tools/twitter-search.js');
-      registerTwitterSearchTool(this.server, masaService);
+      logger.info('Starting tools registration...');
       
-      // Importer et enregistrer l'outil d'indexation de données
-      const { registerDataIndexingTool } = await import('../tools/data-indexing.js');
-      registerDataIndexingTool(this.server, masaService);
+      // Enregistrement synchrone des outils pour éviter les problèmes d'imports dynamiques
       
-      // Nouveaux outils
-      // Importer et enregistrer l'outil de scraping web
-      const { registerWebScrapingTool } = await import('../tools/web-scraping.js');
-      registerWebScrapingTool(this.server, masaService);
+      // Outil de recherche Twitter
+      try {
+        logger.info('Registering Twitter search tools...');
+        const twitterSearchModule = await import('../tools/twitter-search.js');
+        if (typeof twitterSearchModule.registerTwitterSearchTool === 'function') {
+          twitterSearchModule.registerTwitterSearchTool(this.server, masaService);
+          this.registeredTools.push('twitter_search', 'twitter_advanced_search');
+          logger.info('Twitter search tools registered successfully');
+        } else {
+          logger.error('Invalid Twitter search module - missing registration function');
+        }
+      } catch (error) {
+        logger.error('Failed to register Twitter search tools:', error);
+      }
       
-      // Importer et enregistrer l'outil d'analyse de données
-      const { registerDataAnalysisTool } = await import('../tools/data-analysis.js');
-      registerDataAnalysisTool(this.server, masaService);
+      // Outil d'indexation de données
+      try {
+        logger.info('Registering data indexing tools...');
+        const dataIndexingModule = await import('../tools/data-indexing.js');
+        if (typeof dataIndexingModule.registerDataIndexingTool === 'function') {
+          dataIndexingModule.registerDataIndexingTool(this.server, masaService);
+          this.registeredTools.push('index_data', 'query_data');
+          logger.info('Data indexing tools registered successfully');
+        } else {
+          logger.error('Invalid data indexing module - missing registration function');
+        }
+      } catch (error) {
+        logger.error('Failed to register data indexing tools:', error);
+      }
+      
+      // Outil de scraping web
+      try {
+        logger.info('Registering web scraping tools...');
+        const webScrapingModule = await import('../tools/web-scraping.js');
+        if (typeof webScrapingModule.registerWebScrapingTool === 'function') {
+          webScrapingModule.registerWebScrapingTool(this.server, masaService);
+          this.registeredTools.push('web_scrape', 'web_scrape_advanced');
+          logger.info('Web scraping tools registered successfully');
+        } else {
+          logger.error('Invalid web scraping module - missing registration function');
+        }
+      } catch (error) {
+        logger.error('Failed to register web scraping tools:', error);
+      }
+      
+      // Outil d'analyse de données
+      try {
+        logger.info('Registering data analysis tools...');
+        const dataAnalysisModule = await import('../tools/data-analysis.js');
+        if (typeof dataAnalysisModule.registerDataAnalysisTool === 'function') {
+          dataAnalysisModule.registerDataAnalysisTool(this.server, masaService);
+          this.registeredTools.push('extract_search_terms', 'analyze_tweets', 'similarity_search');
+          logger.info('Data analysis tools registered successfully');
+        } else {
+          logger.error('Invalid data analysis module - missing registration function');
+        }
+      } catch (error) {
+        logger.error('Failed to register data analysis tools:', error);
+      }
       
       // Enregistrer les outils Bittensor seulement si Bittensor est activé
       if (isBittensorEnabled()) {
-        // Importer et enregistrer l'outil d'information Bittensor
-        const { registerBittensorInfoTool } = await import('../tools/bittensor-info.js');
-        registerBittensorInfoTool(this.server, bittensorService);
-        
-        // Importer et enregistrer l'outil de recherche Bittensor
-        const { registerBittensorSearchTool } = await import('../tools/bittensor-search.js');
-        registerBittensorSearchTool(this.server, bittensorService);
+        try {
+          logger.info('Registering Bittensor info tools...');
+          const bittensorInfoModule = await import('../tools/bittensor-info.js');
+          bittensorInfoModule.registerBittensorInfoTool(this.server, bittensorService);
+          this.registeredTools.push('bittensor_info');
+          logger.info('Bittensor info tools registered successfully');
+          
+          logger.info('Registering Bittensor search tools...');
+          const bittensorSearchModule = await import('../tools/bittensor-search.js');
+          bittensorSearchModule.registerBittensorSearchTool(this.server, bittensorService);
+          this.registeredTools.push('bittensor_search');
+          logger.info('Bittensor search tools registered successfully');
+        } catch (error) {
+          logger.error('Failed to register Bittensor tools:', error);
+        }
       } else {
         // Si Bittensor est désactivé, créer une version simplifiée de subnet_info
+        logger.info('Registering simplified subnet_info tool (Bittensor disabled)');
         this.server.tool(
           'subnet_info',
           {},
@@ -106,9 +172,12 @@ Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to you
             };
           }
         );
+        this.registeredTools.push('subnet_info');
       }
       
-      logger.info('MCP tools registered successfully');
+      // Log les outils enregistrés
+      logger.info(`MCP tools registered successfully. Total tools: ${this.registeredTools.length}`);
+      logger.info(`Registered tools: ${this.registeredTools.join(', ')}`);
     } catch (error) {
       logger.error('Failed to register MCP tools:', error);
       throw error;
@@ -122,28 +191,62 @@ Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to you
    */
   private async registerResources(masaService: any, bittensorService: any): Promise<void> {
     try {
-      // Importer et enregistrer la ressource de recherche Twitter uniquement
-      const { registerDataResource } = await import('../resources/data-resource.js');
-      registerDataResource(this.server, masaService);
+      logger.info('Starting resources registration...');
       
-      // Nouvelle ressource web
-      const { registerWebResource } = await import('../resources/web-resource.js');
-      registerWebResource(this.server, masaService);
-      
-      // Importer et enregistrer les ressources Bittensor seulement si Bittensor est activé
-      if (isBittensorEnabled()) {
-        // Enregistrer la ressource principale Bittensor
-        const { registerBittensorResource } = await import('../resources/bittensor-resource.js');
-        registerBittensorResource(this.server, bittensorService);
-        
-        // Enregistrer la ressource de données Bittensor (pour data://bittensor)
-        const { registerBittensorDataResource } = await import('../resources/bittensor-data.js');
-        registerBittensorDataResource(this.server, bittensorService);
-        
-        logger.info('Bittensor resources registered successfully');
+      // Ressource pour les recherches Twitter
+      try {
+        logger.info('Registering Twitter search resource...');
+        const dataResourceModule = await import('../resources/data-resource.js');
+        if (typeof dataResourceModule.registerDataResource === 'function') {
+          dataResourceModule.registerDataResource(this.server, masaService);
+          this.registeredResources.push('twitter-search://info');
+          logger.info('Twitter searches resource registered successfully');
+        } else {
+          logger.error('Invalid data resource module - missing registration function');
+        }
+      } catch (error) {
+        logger.error('Failed to register Twitter search resource:', error);
       }
       
-      logger.info('MCP resources registered successfully');
+      // Ressource pour les pages web
+      try {
+        logger.info('Registering web resource...');
+        const webResourceModule = await import('../resources/web-resource.js');
+        if (typeof webResourceModule.registerWebResource === 'function') {
+          webResourceModule.registerWebResource(this.server, masaService);
+          this.registeredResources.push('web://info');
+          logger.info('Web pages resource registered successfully');
+        } else {
+          logger.error('Invalid web resource module - missing registration function');
+        }
+      } catch (error) {
+        logger.error('Failed to register web resource:', error);
+      }
+      
+      // Ressources Bittensor (si activé)
+      if (isBittensorEnabled()) {
+        try {
+          logger.info('Registering Bittensor resources...');
+          
+          // Ressource principale Bittensor
+          const bittensorResourceModule = await import('../resources/bittensor-resource.js');
+          bittensorResourceModule.registerBittensorResource(this.server, bittensorService);
+          this.registeredResources.push('bittensor-subnet://list', 'bittensor-neuron://info', 'bittensor-network://stats');
+          
+          // Ressource de données Bittensor
+          const bittensorDataModule = await import('../resources/bittensor-data.js');
+          bittensorDataModule.registerBittensorDataResource(this.server, bittensorService);
+          this.registeredResources.push('data://bittensor');
+          
+          logger.info('Bittensor resources registered successfully');
+        } catch (error) {
+          logger.error('Failed to register Bittensor resources:', error);
+        }
+      }
+      
+      // Log les ressources enregistrées
+      logger.info(`MCP resources registered successfully. Total resources: ${this.registeredResources.length}`);
+      logger.info(`Registered resources: ${this.registeredResources.join(', ')}`);
     } catch (error) {
       logger.error('Failed to register MCP resources:', error);
       throw error;
@@ -155,6 +258,8 @@ Note: Bittensor functionality is currently disabled. Add TAO_STAT_API_KEY to you
    */
   start(options?: { httpPort?: number, httpHost?: string }): void {
     try {
+      logger.info('Starting MCP server...');
+      
       // Configurer le transport en utilisant la factory
       this.transport = TransportFactory.createTransport(options);
       
