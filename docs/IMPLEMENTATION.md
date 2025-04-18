@@ -2,19 +2,7 @@
 
 ## Architecture
 
-The Masa Subnet 42 MCP Plugin is built on a modular architecture designed to provide seamless integration between AI models and external data sources. The implementation follows these key architectural principles:
-
-1. **Modular Service Design**: Core functionality is divided into independent services that can be developed, tested, and scaled separately.
-
-2. **Protocol-First Approach**: All components implement the Model Context Protocol specifications, ensuring standardized communication.
-
-3. **Pluggable Transport Layer**: The system supports multiple transport mechanisms (stdio, HTTP/SSE) via a common interface.
-
-4. **Factory Pattern**: Service implementations are created through factories to simplify configuration and testing.
-
-5. **Lazy Loading**: Resources are defined statically but content is loaded on-demand to optimize performance.
-
-The overall architecture can be visualized as:
+The Masa Subnet 42 MCP Server implements a modular architecture connecting AI models to external data sources:
 
 ```
 ┌─────────────────┐     ┌───────────────┐     ┌───────────────────┐
@@ -32,36 +20,38 @@ The overall architecture can be visualized as:
                              ┌───────────────┐ ┌─────────────┐  ┌───────────────┐
                              │  Masa API     │ │ Bittensor   │  │ Data Indexing │
                              │  Service      │ │ API Service │  │ Service       │
-                             └───────────────┘ └─────────────┘  └───────────────┘
+                             └───────────────┘ └──────┬──────┘  └───────────────┘
+                                                      │
+                                                      ▼
+                                             ┌─────────────────┐
+                                             │ TaoStats Cache  │
+                                             │    Service      │
+                                             └─────────────────┘
 ```
 
-## Masa Resources and API Access
+The architecture follows these principles:
 
-### Setting Up Masa Protocol
-For detailed instructions on setting up the Masa Protocol environment, please refer to the official documentation:
-- [Masa Protocol Environment Setup Guide](https://developers.masa.ai/docs/masa-protocol/environment-setup)
+1. **Modular Services**: Independent components that can be developed and tested separately
+2. **Factory Pattern**: Services are created through factories for simpler configuration
+3. **Lazy Loading**: Content is loaded on-demand to optimize API usage
+4. **Intelligent Caching**: Persistent caching system for TaoStats API
 
-### Obtaining a Masa API Key
-To obtain an API key for accessing Masa API services, please visit:
-- [Masa API Documentation](https://developers.masa.ai/docs/index-API/masa-api-search)
-
-## Components
-
-The implementation consists of these core components:
+## Core Components
 
 ### 1. MCP Server
 
-The central component that implements the Model Context Protocol server, built on `@modelcontextprotocol/sdk`. It:
-- Handles protocol lifecycle (initialization, message exchange, termination)
-- Registers resources and tools
-- Manages capabilities and configuration
+The central component built on `@modelcontextprotocol/sdk`:
 
 ```typescript
 export class MasaSubnetMcpServer {
   private server: McpServer;
   private transport: any;
+  private registeredTools: string[] = [];
+  private registeredResources: string[] = [];
+  private currentMode: MasaMode;
   
   constructor() {
+    this.currentMode = env.MASA_MODE;
     this.server = new McpServer({
       name: env.MCP_SERVER_NAME,
       version: env.MCP_SERVER_VERSION,
@@ -73,347 +63,376 @@ export class MasaSubnetMcpServer {
     // Initialize services, tools, and resources
   }
   
-  start() {
-    // Configure and start the transport
+  start(options?: { httpPort?: number, httpHost?: string }) {
+    // Configure transport and start server
   }
 }
 ```
 
-### 2. Service Layer
+### 2. TaoStats Cache Service
 
-The service layer abstracts external API interactions:
+A key innovation for efficient API usage:
+
+```typescript
+export class TaoStatsCacheService {
+  private cache: Map<string, CacheEntry<any>> = new Map();
+  private pendingRequests: Map<string, Promise<any>> = new Map();
+  private cachePath: string;
+  private requestCounter: number = 0;
+  private dailyRequestLimit: number = 5;
+  private lastResetDay: number = new Date().getUTCDate();
+  
+  async withCache<T>(
+    key: string,
+    fetchFn: () => Promise<T>,
+    options: {
+      ttl?: number;
+      forceRefresh?: boolean;
+      fallbackToCache?: boolean;
+      critical?: boolean;
+      failSilently?: boolean;
+    } = {}
+  ): Promise<T> {
+    // Intelligent caching logic
+  }
+  
+  // Cache management methods
+  private async initializeCache(): Promise<void> { /* ... */ }
+  private async persistCache(): Promise<void> { /* ... */ }
+  getCacheStats(): { /* ... */ } { /* ... */ }
+  invalidate(key: string): void { /* ... */ }
+  invalidateByPrefix(prefix: string): number { /* ... */ }
+  clear(): void { /* ... */ }
+}
+```
+
+### 3. Service Layer
 
 #### Masa Service
 
-Provides Twitter search and data indexing capabilities:
-- `searchTwitter()`: Execute Twitter searches
-- `getTwitterSearchResults()`: Retrieve search results
-- `indexData()`: Store data for future retrieval
-- `queryData()`: Query previously indexed data
+Provides Twitter search and data indexing:
+
+```typescript
+interface MasaService {
+  // Twitter endpoints
+  searchTwitter(request: TwitterSearchRequest): Promise<TwitterSearchResult>;
+  checkTwitterSearchStatus(jobId: string): Promise<{
+    status: 'pending' | 'completed' | 'failed';
+    message?: string;
+  }>;
+  getTwitterSearchResults(jobId: string): Promise<TwitterSearchResult>;
+  
+  // Data indexing endpoints
+  indexData(request: DataIndexRequest): Promise<DataIndexResult>;
+  queryData(request: DataQueryRequest): Promise<DataQueryResult>;
+  
+  // Web scraping endpoints
+  scrapeWeb(request: WebScrapeRequest): Promise<WebScrapeResult>;
+  
+  // Analysis endpoints
+  extractSearchTerms(request: TermExtractionRequest): Promise<TermExtractionResult>;
+  analyzeData(request: DataAnalysisRequest): Promise<DataAnalysisResult>;
+  searchBySimilarity(request: SimilaritySearchRequest): Promise<SimilaritySearchResult>;
+}
+```
 
 #### Bittensor Service
 
-Provides Bittensor network data access:
-- `getSubnetInfo()`: Retrieve subnet information
-- `getSubnetNodes()`: List nodes in a subnet
-- `getValidatorInfo()`: Get validator details
-- `getNeuronInfo()`: Get neuron details
-- `getNetworkStats()`: Retrieve network statistics
+Provides cached access to Bittensor data:
 
-### 3. Resources
+```typescript
+interface BittensorService {
+  getSubnetInfo(netuid?: number): Promise<BittensorSubnetInfo | BittensorSubnetInfo[]>;
+  getSubnetNodes(netuid: number, limit?: number, offset?: number): Promise<BittensorNodeInfo[]>;
+  getValidatorInfo(hotkey: string): Promise<BittensorValidatorInfo>;
+  getNeuronInfo(hotkey: string, netuid?: number): Promise<BittensorNeuronInfo>;
+  getNetworkStats(): Promise<BittensorNetworkStats>;
+}
 
-Resources provide data access via URI templates:
-
-#### Twitter Resources
-- `twitter-search://{searchId}`: Access stored search results
-
-#### Bittensor Resources
-- `bittensor-subnet://{netuid}`: Access subnet information
-- `bittensor-neuron://{subnet}/{hotkey}`: Access neuron information
-- `bittensor-network://{type}`: Access network-level information
-- `data://bittensor/{category}/{query}`: Structured data access
-
-### 4. Tools
-
-Tools provide functional capabilities:
-
-#### Twitter Tools
-- `twitter_search`: Search Twitter
-- `twitter_advanced_search`: Advanced Twitter search
-
-#### Data Indexing Tools
-- `index_data`: Store data for future retrieval
-- `query_data`: Query indexed data
-
-#### Bittensor Tools
-- `bittensor_subnet_info`: Get subnet information
-- `bittensor_subnet_nodes`: List subnet nodes
-- `bittensor_validator_info`: Get validator information
-- `bittensor_neuron_info`: Get neuron information
-- `bittensor_network_stats`: Get network statistics
-- `bittensor_search`: Search entities in the network
-
-### 5. Transport Layer
-
-The transport layer handles the communication protocol:
-- `StdioServerTransport`: For CLI and desktop application integration
-- `SSEServerTransport`: For web-based integration
-
-## Setup
-
-Setting up the Masa Subnet 42 MCP Plugin involves these steps:
-
-### 1. Environment Preparation
-
-Ensure you have:
-- Node.js v18 or higher
-- npm v7 or higher
-
-### 2. Installation
-
-Clone and set up the repository:
-
-```bash
-git clone https://github.com/Naesmal/endgame-mcp-hackathon.git
-cd endgame-mcp-hackathon
-npm install
+// Extended service with cache statistics
+interface BittensorCachedApiService extends BittensorService {
+  getApiUsageStats(): {
+    size: number;
+    apiCallsUsed: number;
+    apiCallsRemaining: number;
+    lastResetDay: number;
+  };
+}
 ```
 
-### 3. Configuration
+### 4. Transport Layer
 
-Create a `.env` file with required settings:
+The transport layer handles protocol communication:
+
+```typescript
+export class TransportFactory {
+  static createTransport(options?: { 
+    httpPort?: number,
+    httpHost?: string
+  }) {
+    const transportType = process.env.MCP_TRANSPORT_TYPE || 'stdio';
+    
+    switch (transportType.toLowerCase()) {
+      case 'http':
+        return this.setupHttpTransport(options);
+      case 'stdio':
+      default:
+        return new StdioServerTransport();
+    }
+  }
+  
+  static setupSSERoutes(mcpServer: any, httpTransport: any) {
+    // Set up HTTP/SSE routes
+  }
+}
+```
+
+## Resources and Tools
+
+### Resources Implementation
+
+All resources follow a similar pattern:
+
+```typescript
+server.resource(
+  'resource_name',
+  new ResourceTemplate('protocol://{param1}/{param2}', {
+    list: async () => {
+      // Return static list of resources
+      return { resources: [ ... ] };
+    }
+  }),
+  async (uri, params) => {
+    try {
+      // Access and format data
+      return {
+        title: "Resource Title",
+        contents: [
+          {
+            uri: uri.href,
+            text: "Resource content..."
+          }
+        ]
+      };
+    } catch (error) {
+      return {
+        contents: [],
+        errorMessage: `Error: ${error.message}`
+      };
+    }
+  }
+);
+```
+
+### Tools Implementation
+
+Tools are implemented following this pattern:
+
+```typescript
+server.tool(
+  'tool_name',
+  {
+    // Zod schema for parameters
+    param1: z.string().describe('Parameter description'),
+    param2: z.number().optional().describe('Optional parameter')
+  },
+  async (params) => {
+    try {
+      // Tool implementation
+      return {
+        content: [{ 
+          type: "text", 
+          text: "Tool result..." 
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{ 
+          type: "text", 
+          text: `Error: ${error.message}` 
+        }],
+        isError: true
+      };
+    }
+  }
+);
+```
+
+## Cache Strategy
+
+Our caching approach offers significant benefits:
+
+1. **Persistent Storage**
+   - Cache is saved to `.cache/tao-cache.json`
+   - Survives server restarts
+   - Includes usage statistics
+
+2. **Adaptive TTL**
+   - Network stats: 15 minutes
+   - Subnet information: 30 minutes
+   - Validator/neuron data: 10-20 minutes
+
+3. **Request Consolidation**
+   - Identical concurrent requests are merged
+   - Results are shared among all callers
+
+4. **Fallback Mechanism**
+   - When rate limits are reached, returns cached data even if expired
+   - Gradually degrades service instead of failing
+
+## Configuration
+
+### Environment Variables
+
+Key configuration options:
 
 ```
-# Mode Configuration (API or PROTOCOL)
-MASA_MODE=API  # Options: API or PROTOCOL
-
-# API Configuration
-MASA_API_KEY=your_api_key_here
-MASA_API_BASE_URL=https://api1.dev.masalabs.ai
-
-# Protocol Configuration
-MASA_PROTOCOL_NODE_URL=http://localhost:8080
-
 # MCP Server Configuration
 MCP_SERVER_NAME=Masa Subnet 42 Data Provider
 MCP_SERVER_VERSION=1.0.0
 MCP_SERVER_DESCRIPTION=Provides data access to Masa Subnet 42 resources
 MCP_TRANSPORT_TYPE=stdio  # Options: stdio, http
-MCP_HTTP_PORT=3030  # Port for HTTP transport
-MCP_HTTP_HOST=localhost  # Host for HTTP transport
-
-# Log Configuration
-LOG_LEVEL=info  # Options: debug, info, warn, error
+MCP_HTTP_PORT=3030
+MCP_HTTP_HOST=localhost
 
 # Bittensor Configuration
-#TAO_STAT_API_KEY=your_taostat_api_key_here #(uncomment this line if you want to use the Bittensor API)
-
+TAO_STAT_API_KEY=your_taostat_api_key_here
+TAO_STAT_DAILY_LIMIT=5  # Default API request limit per day
 ```
 
-### 4. Building
+### Mode Selection
 
-Build the TypeScript code:
+The server supports two operating modes:
 
-```bash
-npm run build
+1. **API Mode** (`MASA_MODE=API`)
+   - Uses Masa API for Twitter search
+   - Includes analysis tools
+   - Requires `MASA_API_KEY`
+
+2. **PROTOCOL Mode** (`MASA_MODE=PROTOCOL`)
+   - Uses Masa Protocol for direct access
+   - Includes advanced Twitter search
+   - Includes advanced web scraping
+
+## Performance Optimizations
+
+### 1. Lazy Loading
+
+Resources are only loaded when explicitly requested:
+
+```typescript
+async (uri, params) => {
+  // Only load specific subnet when requested
+  if (params.netuid) {
+    // Cache key for this specific subnet
+    const cacheKey = `subnet:info:${params.netuid}`;
+    
+    // Load with 30-minute TTL
+    return taoStatsCache.withCache(
+      cacheKey,
+      async () => bittensorService.getSubnetInfo(params.netuid),
+      { ttl: 30 * 60 * 1000 }
+    );
+  } else {
+    // Return list of all subnets (different cache key and TTL)
+  }
+}
 ```
 
-### 5. Publishing (Optional)
+### 2. Request Deduplication
 
-For npm package publishing:
+Concurrent identical requests are consolidated:
 
-```bash
-npm publish
+```typescript
+// If there's already a pending request for this key, return it
+const pendingRequest = this.pendingRequests.get(key);
+if (pendingRequest && !forceRefresh) {
+  logger.debug(`Using pending request for key: ${key}`);
+  return pendingRequest;
+}
+
+// Otherwise, create a new request and store it
+const fetchPromise = (async () => {
+  // API request logic
+})();
+
+// Store the promise for deduplication
+this.pendingRequests.set(key, fetchPromise);
 ```
 
-## Usage
+### 3. API Limit Management
 
-### Standalone Usage
+The system tracks and manages daily API limits:
 
-Run the server directly:
+```typescript
+// Reset counter at midnight UTC
+const currentDay = new Date().getUTCDate();
+if (currentDay !== this.lastResetDay) {
+  this.requestCounter = 0;
+  this.lastResetDay = currentDay;
+}
 
-```bash
-npm start
+// Check if limit is reached
+if (this.requestCounter >= this.dailyRequestLimit && !critical) {
+  // Use expired cache data if available
+  if (cachedEntry && fallbackToCache) {
+    return cachedEntry.data;
+  }
+  
+  // Otherwise, fail gracefully
+  throw new Error(`TaoStats API daily limit reached`);
+}
 ```
+
+## Integration Example
 
 ### Claude Desktop Integration
 
-1. Open Claude Desktop
-2. Navigate to Settings > Developer > Edit Config
-3. Add the following to your `claude_desktop_config.json`:
+1. Edit `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "masa-subnet": {
+    "masa-subnet-mcp": {
       "command": "node",
       "args": [
-        "path/dist/index.js"
+        "/path/to/dist/index.js"
       ]
     }
   }
 }
 ```
 
-4. Restart Claude Desktop
-5. When conversing with Claude, use the hammer icon to access tools
+2. Restart Claude Desktop
 
-### Developer Integration
+3. Click the tool icon in the input field
 
-For developers integrating with the plugin:
+4. Use tools like:
+   - `bittensor_subnet_info`
+   - `twitter_search`
+   - `tao_stats_usage`
 
-```typescript
-import { MasaSubnetMcpServer } from 'masa-mcp-plugin';
+## Monitoring and Debugging
 
-const server = new MasaSubnetMcpServer();
-await server.initialize();
-server.start({ httpPort: 3000 }); // Optional HTTP configuration
-```
+The server includes comprehensive monitoring:
 
-## Performance
+1. **API Usage Tracking**
+   ```typescript
+   const stats = bittensorService.getApiUsageStats();
+   console.log(`API calls: ${stats.apiCallsUsed}/${stats.apiCallsUsed + stats.apiCallsRemaining}`);
+   ```
 
-The implementation includes several performance optimizations:
+2. **Cache Statistics**
+   ```typescript
+   const stats = taoStatsCache.getCacheStats();
+   console.log(`Cache entries: ${stats.size}`);
+   ```
 
-### 1. Static Resource Lists
+3. **Logging Configuration**
+   ```typescript
+   LOG_LEVEL=debug  // For detailed operation logs
+   ```
 
-Resource lists are pre-defined statically to avoid excessive API calls:
-
-```typescript
-list: async () => {
-  // Return static list instead of API calls
-  const resources = [];
-  
-  // Add static subnet entries
-  for (let i = 0; i <= 30; i++) {
-    resources.push({
-      uri: `bittensor-subnet://${i}`,
-      name: `Subnet ${i}`,
-      description: `Bittensor subnet with ID ${i}`
-    });
-  }
-  
-  return { resources };
-}
-```
-
-### 2. Lazy Loading
-
-Detailed data is loaded only when explicitly requested:
-
-```typescript
-async (uri, params) => {
-  // Only load subnet data when a specific netuid is requested
-  if (params.netuid) {
-    const subnet = await bittensorService.getSubnetInfo(params.netuid);
-    // Process and return subnet data
-  } else {
-    // Return a list of available subnets (lighter operation)
-  }
-}
-```
-
-### 3. Error Recovery
-
-Robust error handling prevents cascading failures:
-
-```typescript
-try {
-  const result = await apiCall();
-  return formatResult(result);
-} catch (error) {
-  logger.error('API Error:', error);
-  // Return meaningful error without failing the whole request
-  return {
-    content: [{ 
-      type: "text", 
-      text: `Error: ${error.message}` 
-    }],
-    isError: true
-  };
-}
-```
-
-### 4. Performance Metrics
-
-In our testing, the implementation achieves:
-
-- **Resource Listing**: <100ms for static resources
-- **Twitter Search**: 1-2 seconds depending on query complexity
-- **Bittensor Data Retrieval**: 200-500ms for subnet information
-- **Concurrent Connections**: Supports 10+ simultaneous clients (HTTP mode)
-
-## Testing
-
-Our testing approach includes:
-
-### 1. Unit Testing
-
-Individual components are tested in isolation:
-- Service mock objects
-- Resource and tool handler tests
-- Transport layer tests
-
-Example unit test:
-
-```typescript
-describe('BittensorService', () => {
-  let service: BittensorService;
-  let mockApiClient: jest.Mocked<AxiosInstance>;
-  
-  beforeEach(() => {
-    mockApiClient = createMockAxiosInstance();
-    service = new BittensorApiService(mockApiClient);
-  });
-  
-  test('getSubnetInfo returns formatted subnet data', async () => {
-    // Arrange
-    mockApiClient.get.mockResolvedValue({
-      data: { /* mock API response */ }
-    });
-    
-    // Act
-    const result = await service.getSubnetInfo(1);
-    
-    // Assert
-    expect(result).toHaveProperty('netuid', 1);
-    expect(result).toHaveProperty('totalValidators');
-    expect(mockApiClient.get).toHaveBeenCalledWith('/subnet/latest/v1?netuid=1');
-  });
-});
-```
-
-### 2. Integration Testing
-
-End-to-end tests that validate:
-- Server initialization
-- Resource and tool registration
-- Request handling
-
-Example integration test:
-
-```typescript
-describe('MCP Server Integration', () => {
-  let server: MasaSubnetMcpServer;
-  let client: McpClient;
-  
-  beforeEach(async () => {
-    // Set up server with mock services
-    server = new MasaSubnetMcpServer();
-    await server.initialize();
-    server.start();
-    
-    // Connect client
-    client = new McpClient();
-    await client.connect();
-  });
-  
-  test('client can list resources', async () => {
-    // Act
-    const resources = await client.listResources();
-    
-    // Assert
-    expect(resources).toContainEqual(
-      expect.objectContaining({
-        uri: 'twitter-search://info'
-      })
-    );
-  });
-});
-```
-
-### 3. Performance Testing
-
-Metrics for:
-- Resource listing speed
-- Tool call latency
-- Concurrent connection handling
-
-### 4. Manual Testing
-
-Claude Desktop integration testing:
-- Tool discoverability
-- Resource access
-- Error handling
-- User experience
-
-Our tests show consistent performance across different environments, with robust error handling and graceful degradation when external services are unavailable.
+4. **Usage Tool**
+   - The `tao_stats_usage` tool provides comprehensive statistics
+   - Shows calls used, remaining calls, cache size, and reset date
