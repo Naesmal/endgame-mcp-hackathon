@@ -12,25 +12,21 @@ export interface TwitterSearchRequest {
 // Type pour le résultat de recherche Twitter
 export interface TwitterSearchResult {
   id: string;
-  data?: TwitterData[];
-  workerPeerId?: string;
+  data?: Array<TwitterData>;
   error?: string;
+  workerPeerId?: string;
+  pending?: boolean; // Nouvel attribut pour indiquer si la recherche est toujours en cours
 }
 
-// Type pour les données Twitter
 export interface TwitterData {
   Tweet?: {
     ID: string;
-    ConversationID: string;
+    ExternalID?: string;
     Text: string;
-    HTML: string;
-    Hashtags?: string[];
-    CreatedAt: string;
     Username: string;
+    CreatedAt: string;
     LikeCount?: number;
     RetweetCount?: number;
-    ReplyCount?: number;
-    [key: string]: any;
   };
   Error?: string;
 }

@@ -1,6 +1,11 @@
 // twitter-search.js
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { MasaService } from '../services/masa-service';
+import { 
+  TwitterSearchResult, 
+  TwitterData, 
+  TwitterSearchRequest 
+} from '../types';
 import { z } from 'zod';
 import logger from '../utils/logger';
 import { env } from '../config/env';
@@ -21,7 +26,7 @@ export function registerTwitterSearchTool(server: McpServer, masaService: MasaSe
       try {
         logger.info(`Performing Twitter search for query: ${query}`);
         
-        // Effectuer la recherche
+        // Effectuer la recherche initiale pour obtenir l'ID du job
         const searchResult = await masaService.searchTwitter({
           query,
           count: maxResults
@@ -38,94 +43,110 @@ export function registerTwitterSearchTool(server: McpServer, masaService: MasaSe
           };
         }
         
-        // Si nous sommes en mode API, nous devons attendre que la recherche soit terminée
+        const jobId = searchResult.id;
+        if (!jobId) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text',
+              text: `Error: No job ID returned from Twitter search`
+            }]
+          };
+        }
+        
+        logger.info(`Twitter search job initiated with ID: ${jobId}`);
+        
+        // Si nous sommes en mode API, nous devons gérer le flux asynchrone
         if (env.MASA_MODE === 'API') {
-          const jobId = searchResult.id;
-          logger.info(`Twitter search job created with ID: ${jobId}`);
-          
-          // Vérifier l'état de la recherche jusqu'à ce qu'elle soit terminée
-          let status = 'pending';
-          // Initialiser statusResult avec un objet par défaut pour éviter l'erreur undefined
-          let statusResult: { status: string, message?: string } = { status: 'pending' };
-          
           // Attendre que la recherche soit terminée (avec timeout après 30 secondes)
           const startTime = Date.now();
           const timeout = 30000; // 30 secondes
+          const pollingInterval = 1000; // 1 seconde entre les vérifications
           
-          while (status === 'pending') {
+          // Fonction pour vérifier périodiquement le statut
+          const checkStatus = async (): Promise<TwitterSearchResult | null> => {
             // Vérifier si nous avons dépassé le timeout
             if (Date.now() - startTime > timeout) {
+              throw new Error(`Twitter search timed out after ${timeout/1000} seconds`);
+            }
+            
+            try {
+              // Vérifier l'état de la recherche
+              const statusResult = await masaService.checkTwitterSearchStatus(jobId);
+              logger.debug(`Twitter search status: ${statusResult.status}`);
+              
+              if (statusResult.status === 'completed') {
+                // Recherche terminée avec succès, récupérer les résultats
+                return await masaService.getTwitterSearchResults(jobId);
+              } else if (statusResult.status === 'failed') {
+                // Recherche échouée
+                throw new Error(`Twitter search failed: ${statusResult.message || 'Unknown error'}`);
+              } else {
+                // Recherche toujours en cours, attendre et réessayer
+                await new Promise(resolve => setTimeout(resolve, pollingInterval));
+                return null; // Signale qu'il faut continuer à vérifier
+              }
+            } catch (error) {
+              throw error;
+            }
+          };
+          
+          // Boucle de polling avec gestion d'erreur
+          let results: TwitterSearchResult | null = null;
+          try {
+            while (results === null) {
+              results = await checkStatus();
+            }
+            
+            // À ce stade, nous avons les résultats
+            const tweetResults = results.data || [];
+            
+            if (tweetResults.length === 0) {
               return {
-                isError: true,
                 content: [{
                   type: 'text',
-                  text: `Twitter search timed out after 30 seconds. Try again later or use a more specific query.`
+                  text: `No tweets found for query: ${query}`
                 }]
               };
             }
             
-            // Attendre 1 seconde avant de vérifier à nouveau
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Formater les résultats
+            const formattedTweets = tweetResults.map((item: TwitterData) => {
+              if (item.Tweet) {
+                const tweet = item.Tweet;
+                const date = tweet.CreatedAt ? new Date(tweet.CreatedAt).toLocaleString() : 'Unknown date';
+                
+                // Ajouter des informations sur les likes et retweets si disponibles
+                let statsInfo = '';
+                if (tweet.LikeCount !== undefined || tweet.RetweetCount !== undefined) {
+                  let stats = [];
+                  if (tweet.LikeCount !== undefined) stats.push(`❤️ ${tweet.LikeCount}`);
+                  if (tweet.RetweetCount !== undefined) stats.push(`🔄 ${tweet.RetweetCount}`);
+                  statsInfo = ` [${stats.join(' | ')}]`;
+                }
+                
+                return `@${tweet.Username} (${date})${statsInfo}: ${tweet.Text}`;
+              }
+              return null;
+            }).filter(Boolean);
             
-            // Vérifier l'état de la recherche
-            statusResult = await masaService.checkTwitterSearchStatus(jobId);
-            status = statusResult.status;
-            
-            logger.debug(`Twitter search status: ${status}`);
-          }
-          
-          // Vérifier si la recherche a échoué
-          if (status === 'failed') {
+            return {
+              content: [{
+                type: 'text',
+                text: `Found ${formattedTweets.length} tweets for query "${query}":\n\n${formattedTweets.join('\n\n')}`
+              }]
+            };
+          } catch (error) {
+            // Gérer les erreurs de polling
             return {
               isError: true,
               content: [{
                 type: 'text',
-                text: `Twitter search failed: ${statusResult.message || 'Unknown error'}`
+                text: `Error during Twitter search process: ${error instanceof Error ? error.message : 'Unknown error'}`
               }]
             };
           }
           
-          // Récupérer les résultats
-          const results = await masaService.getTwitterSearchResults(jobId);
-          
-          // Vérifier si une erreur s'est produite
-          if (results.error) {
-            return {
-              isError: true,
-              content: [{
-                type: 'text',
-                text: `Error retrieving Twitter search results: ${results.error}`
-              }]
-            };
-          }
-          
-          // Formater les résultats
-          const tweetResults = results.data || [];
-          
-          if (tweetResults.length === 0) {
-            return {
-              content: [{
-                type: 'text',
-                text: `No tweets found for query: ${query}`
-              }]
-            };
-          }
-          
-          // Formater les résultats
-          const formattedTweets = tweetResults.map(item => {
-            if (item.Tweet) {
-              const tweet = item.Tweet;
-              return `@${tweet.Username} (${new Date(tweet.CreatedAt).toLocaleString()}): ${tweet.Text}`;
-            }
-            return null;
-          }).filter(Boolean);
-          
-          return {
-            content: [{
-              type: 'text',
-              text: `Found ${formattedTweets.length} tweets for query "${query}":\n\n${formattedTweets.join('\n\n')}`
-            }]
-          };
         } else {
           // En mode PROTOCOL, les résultats sont disponibles immédiatement
           const tweetResults = searchResult.data || [];
@@ -140,7 +161,7 @@ export function registerTwitterSearchTool(server: McpServer, masaService: MasaSe
           }
           
           // Formater les résultats
-          const formattedTweets = tweetResults.map(item => {
+          const formattedTweets = tweetResults.map((item: TwitterData) => {
             if (item.Tweet) {
               const tweet = item.Tweet;
               return `@${tweet.Username} (${new Date(tweet.CreatedAt).toLocaleString()}): ${tweet.Text}`;
@@ -262,8 +283,8 @@ export function registerTwitterAdvancedSearchTool(server: McpServer, masaService
         
         // Formater les résultats
         const formattedTweets = tweetResults
-          .filter(item => item.Tweet)
-          .map(item => {
+          .filter((item: TwitterData) => item.Tweet)
+          .map((item: TwitterData) => {
             // Vérifier que Tweet existe avant d'y accéder
             const tweet = item.Tweet;
             // Puisque nous avons déjà filtré, tweet ne peut pas être undefined ici,

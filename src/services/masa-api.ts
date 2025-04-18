@@ -65,11 +65,34 @@ export class MasaApiService implements MasaService {
     );
   }
   
-  // Méthodes existantes - conservées telles quelles
+  // Méthodes existantes - améliorées pour gestion correcte du workflow
   async searchTwitter(request: TwitterSearchRequest): Promise<TwitterSearchResult> {
     try {
-      const response = await this.client.post(API_ENDPOINTS.TWITTER.SEARCH, request);
-      return response.data;
+      // Préparer la requête au format attendu par l'API
+      const apiRequest = {
+        query: request.query,
+        max_results: request.count || 10,
+        type: 'searchbyquery' // Type par défaut
+      };
+      
+      logger.info(`Initiating Twitter search for query: ${request.query}`);
+      const response = await this.client.post(API_ENDPOINTS.TWITTER.SEARCH, apiRequest);
+      
+      // L'API renvoie un UUID dans la réponse
+      const jobId = response.data.uuid;
+      
+      if (!jobId) {
+        throw new Error('No job ID returned from search API');
+      }
+      
+      logger.info(`Twitter search job created with ID: ${jobId}`);
+      
+      // Renvoyer l'ID du job pour permettre la vérification du statut
+      return {
+        id: jobId,
+        data: [], // Les données seront récupérées ultérieurement
+        pending: true // Indiquer que la recherche est en cours
+      };
     } catch (error) {
       logger.error('Error searching Twitter:', error);
       throw error;
@@ -81,8 +104,25 @@ export class MasaApiService implements MasaService {
     message?: string;
   }> {
     try {
+      logger.info(`Checking Twitter search status for job ${jobId}`);
       const response = await this.client.get(`${API_ENDPOINTS.TWITTER.STATUS}/${jobId}`);
-      return response.data;
+      
+      // Mapper les statuts de l'API vers notre interface interne
+      const apiStatus = response.data.status.toLowerCase();
+      let status: 'pending' | 'completed' | 'failed';
+      
+      if (apiStatus === 'done') {
+        status = 'completed';
+      } else if (apiStatus.includes('error')) {
+        status = 'failed';
+      } else {
+        status = 'pending'; // 'processing' et autres états sont considérés comme 'pending'
+      }
+      
+      return {
+        status,
+        message: response.data.error || undefined
+      };
     } catch (error) {
       logger.error(`Error checking Twitter search status for job ${jobId}:`, error);
       throw error;
@@ -91,8 +131,32 @@ export class MasaApiService implements MasaService {
   
   async getTwitterSearchResults(jobId: string): Promise<TwitterSearchResult> {
     try {
+      logger.info(`Getting Twitter search results for job ${jobId}`);
       const response = await this.client.get(`${API_ENDPOINTS.TWITTER.RESULT}/${jobId}`);
-      return response.data;
+      
+      // Vérifier si nous avons reçu un tableau de résultats
+      if (!Array.isArray(response.data)) {
+        throw new Error(`Invalid response format from API: expected array, got ${typeof response.data}`);
+      }
+      
+      // Adapter le format de l'API à notre interface
+      const processedData = response.data.map(tweet => ({
+        Tweet: {
+          ID: tweet.ID || tweet.Metadata?.tweet_id,
+          ExternalID: tweet.ExternalID || tweet.Metadata?.tweet_id?.toString(),
+          Text: tweet.Content || tweet.text,
+          Username: tweet.Metadata?.username || 'unknown',
+          CreatedAt: tweet.Metadata?.created_at || new Date().toISOString(),
+          LikeCount: tweet.Metadata?.public_metrics?.LikeCount,
+          RetweetCount: tweet.Metadata?.public_metrics?.RetweetCount
+        }
+      }));
+      
+      return {
+        id: jobId,
+        data: processedData,
+        pending: false
+      };
     } catch (error) {
       logger.error(`Error getting Twitter search results for job ${jobId}:`, error);
       throw error;
@@ -181,9 +245,9 @@ export class MasaApiService implements MasaService {
       const response = await this.client.post(API_ENDPOINTS.WEB.SCRAPE, payload);
       
       return {
-        title: response.data.title,
-        content: response.data.content,
-        url: response.data.url,
+        title: response.data.title || response.data.metadata?.title || 'Web Page Content',
+        content: response.data.content || '',
+        url: response.data.url || request.url,
         metadata: response.data.metadata || {}
       };
     } catch (error) {
