@@ -168,7 +168,7 @@ export function registerAdvancedWebScrapingTool(server: McpServer, masaService: 
         let linksSection = '';
         if (extractLinks) {
           // Extraction basique des liens avec une expression régulière
-          const linkRegex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"/gi;
+          const linkRegex = /<a\\s+(?:[^>]*?\\s+)?href="([^"]*)"/gi;
           const links = [];
           let match;
           
