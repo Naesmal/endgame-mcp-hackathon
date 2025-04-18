@@ -22,7 +22,7 @@ import {
   RawTweetData 
 } from '../types';
 import logger from '../utils/logger';
-import { rateLimitHandler } from '../rate-limit-handler';
+import { rateLimitHandler } from '../utils/rate-limit-handler';
 
 /**
  * Implémentation du service Masa utilisant l'API officielle
