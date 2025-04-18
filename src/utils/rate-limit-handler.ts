@@ -1,5 +1,5 @@
 import axios from 'axios';
-import logger from './utils/logger';
+import logger from './logger';
 
 /**
  * Gestionnaire de limites de taux pour l'API Masa
