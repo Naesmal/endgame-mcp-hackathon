@@ -236,3 +236,37 @@ export interface SimilaritySearchResult {
   total: number;
   error?: string;
 }
+
+export interface RawTweetData {
+  ID?: string | number;
+  id?: string | number;
+  tweet_id?: string | number;
+  ExternalID?: string;
+  Content?: string;
+  text?: string;
+  content?: string;
+  Tweet?: string;
+  message?: string;
+  Metadata?: {
+    username?: string;
+    tweet_id?: string | number;
+    created_at?: string;
+    public_metrics?: {
+      LikeCount?: number;
+      RetweetCount?: number;
+    }
+  };
+  username?: string;
+  user?: {
+    screen_name?: string;
+  };
+  author?: string;
+  created_at?: string;
+  timestamp?: string;
+  like_count?: number;
+  favorites?: number;
+  likes?: number;
+  retweet_count?: number;
+  retweets?: number;
+  [key: string]: any;  // Pour permettre d'autres propriétés
+}

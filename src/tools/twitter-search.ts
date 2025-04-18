@@ -11,7 +11,7 @@ import logger from '../utils/logger';
 import { env } from '../config/env';
 
 /**
- * Fonction qui attend que la recherche Twitter soit terminée
+ * Fonction améliorée qui attend que la recherche Twitter soit terminée
  * @param masaService Service Masa à utiliser
  * @param jobId ID du job à surveiller
  * @param timeoutMs Timeout en millisecondes
@@ -30,28 +30,49 @@ async function waitForTwitterSearchCompletion(
   // Fonction pour afficher un message de progression cohérent
   const logProgress = (elapsed: number) => {
     const seconds = (elapsed / 1000).toFixed(1);
-    logger.info(`Twitter search in progress... (${seconds}s elapsed)`);
+    logger.info(`Twitter search in progress... (${seconds}s elapsed, Job ID: ${jobId})`);
   };
+  
+  // Vérification initiale de l'UUID
+  if (!jobId || jobId.trim() === '') {
+    throw new Error('Invalid job ID: empty or undefined');
+  }
+  
+  logger.debug(`Starting polling for job ID: ${jobId}`);
   
   // Boucle de polling améliorée
   while (true) {
     // Vérifier si nous avons dépassé le timeout
     const elapsed = Date.now() - startTime;
     if (elapsed > timeoutMs) {
-      throw new Error(`Twitter search timed out after ${timeoutMs/1000} seconds`);
+      throw new Error(`Twitter search timed out after ${timeoutMs/1000} seconds (Job ID: ${jobId})`);
     }
     
     try {
       // Vérifier l'état de la recherche
       const statusResult = await masaService.checkTwitterSearchStatus(jobId);
-      logger.debug(`Twitter search status: ${statusResult.status}`);
+      logger.debug(`Twitter search status for job ${jobId}: ${statusResult.status}`);
       
       if (statusResult.status === 'completed') {
         // Recherche terminée avec succès, récupérer les résultats
-        return await masaService.getTwitterSearchResults(jobId);
+        logger.info(`Job ${jobId} completed, retrieving results...`);
+        const results = await masaService.getTwitterSearchResults(jobId);
+        
+        // Vérification supplémentaire des résultats
+        if (!results) {
+          throw new Error(`Retrieved null results for completed job ${jobId}`);
+        }
+        
+        // Vérifier si les résultats contiennent une erreur
+        if (results.error) {
+          throw new Error(`Error in search results for job ${jobId}: ${results.error}`);
+        }
+        
+        logger.info(`Successfully retrieved results for job ${jobId}: ${results.data?.length || 0} tweets found`);
+        return results;
       } else if (statusResult.status === 'failed') {
         // Recherche échouée
-        throw new Error(`Twitter search failed: ${statusResult.message || 'Unknown error'}`);
+        throw new Error(`Twitter search failed for job ${jobId}: ${statusResult.message || 'Unknown error'}`);
       } else {
         // Recherche toujours en cours, afficher la progression
         logProgress(elapsed);
@@ -60,9 +81,9 @@ async function waitForTwitterSearchCompletion(
         await new Promise(resolve => setTimeout(resolve, intervalMs));
       }
     } catch (error) {
-      // Si l'erreur vient de l'appel de statut lui-même, la propager
-      logger.error(`Error checking Twitter search status: ${error}`);
-      throw error;
+      // Si l'erreur vient de l'appel de statut lui-même, la propager avec plus de contexte
+      logger.error(`Error checking Twitter search status for job ${jobId}:`, error);
+      throw new Error(`Error while checking status for job ${jobId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }
@@ -116,16 +137,34 @@ export function registerTwitterSearchTool(server: McpServer, masaService: MasaSe
         // Si nous sommes en mode API, nous devons gérer le flux asynchrone
         if (env.MASA_MODE === 'API') {
           try {
+            // Journaliser clairement le début du processus
+            logger.info(`Starting asynchronous Twitter search process for job ${jobId}`);
+            
             // Utiliser la fonction d'attente améliorée
             const results = await waitForTwitterSearchCompletion(
               masaService,
               jobId,
-              30000, // 30 secondes de timeout
+              45000, // 45 secondes de timeout (augmenté)
               2000   // 2 secondes entre chaque vérification
             );
             
+            // Vérification explicite des résultats
+            if (!results) {
+              logger.error(`Received null results after polling completion for job ${jobId}`);
+              return {
+                isError: true,
+                content: [{
+                  type: 'text',
+                  text: `Error during Twitter search process: No results returned after polling completion`
+                }]
+              };
+            }
+            
             // À ce stade, nous avons les résultats
             const tweetResults = results.data || [];
+            
+            // Journaliser le nombre de résultats trouvés
+            logger.info(`Retrieved ${tweetResults.length} tweets for query "${query}" (job ID: ${jobId})`);
             
             if (tweetResults.length === 0) {
               return {
@@ -163,17 +202,16 @@ export function registerTwitterSearchTool(server: McpServer, masaService: MasaSe
               }]
             };
           } catch (error) {
-            // Gérer les erreurs de polling
-            logger.error('Error during Twitter search process:', error);
+            // Gérer les erreurs de polling avec plus de détails
+            logger.error(`Error during Twitter search process for job ${jobId}:`, error);
             return {
               isError: true,
               content: [{
                 type: 'text',
-                text: `Error during Twitter search process: ${error instanceof Error ? error.message : 'Unknown error'}`
+                text: `Error during Twitter search process: ${error instanceof Error ? error.message : 'Unknown error'}\nJob ID: ${jobId}`
               }]
             };
           }
-          
         } else {
           // En mode PROTOCOL, les résultats sont disponibles immédiatement
           const tweetResults = searchResult.data || [];
