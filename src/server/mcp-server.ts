@@ -212,14 +212,21 @@ export class MasaSubnetMcpServer {
               module: '../tools/bittensor-info.js',
               func: 'registerBittensorInfoTool',
               registeredTools: ['bittensor_info'],
-              supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
+              supportedModes: ['API', 'PROTOCOL'] 
             },
             { 
               name: 'Bittensor search',
               module: '../tools/bittensor-search.js',
               func: 'registerBittensorSearchTool',
               registeredTools: ['bittensor_search'],
-              supportedModes: ['API', 'PROTOCOL'] // Disponible dans les deux modes
+              supportedModes: ['API', 'PROTOCOL'] 
+            }, 
+            { 
+              name: 'TaoStats usage',
+              module: '../tools/tao-stats-usage.js',
+              func: 'registerTaoStatsUsageTool',
+              registeredTools: ['tao_stats_usage'],
+              supportedModes: ['API', 'PROTOCOL'] 
             }
           ];
           

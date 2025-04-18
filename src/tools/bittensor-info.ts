@@ -244,38 +244,70 @@ Total Supply: ${(stats.tao.totalSupply / 1000000).toFixed(2)}M τ` : '';
       }
     }
   );
-  
+
   server.tool(
     'subnet_info',
     {},
     async () => {
       try {
-        logger.info('subnet_info tool called (with Bittensor data)');
+        logger.info('subnet_info tool called (with cached Bittensor data)');
         
-        // Récupérer les statistiques du réseau Bittensor
-        const stats = await bittensorService.getNetworkStats();
+        // Cache key for subnet info
+        const cacheKey = 'tool:subnet_info';
         
-        // Formater la réponse
-        const taoInfo = stats.tao ? 
-          `\nTAO Token: $${stats.tao.price.toFixed(4)}, Market Cap: $${(stats.tao.marketCap / 1000000).toFixed(2)}M` : '';
-        
-        return {
-          content: [{ 
-            type: "text", 
-            text: `Subnet: Masa Subnet 42 (Bittensor Gateway)
-Status: active
-Nodes: ${stats.totalValidators}/${stats.totalNeurons}
-Subnets: ${stats.totalSubnets}
-Last Update: ${stats.lastUpdated}${taoInfo}
-
-Note: This subnet provides access to the Bittensor network. Use bittensor_* tools for more detailed information.` 
-          }]
+        // Define a helper function to get the actual data
+        const getSubnetInfoData = async () => {
+          // Récupérer les statistiques du réseau Bittensor
+          const stats = await bittensorService.getNetworkStats();
+          
+          // Formater la réponse
+          const taoInfo = stats.tao ? 
+            `\nTAO Token: $${stats.tao.price.toFixed(4)}, Market Cap: $${(stats.tao.marketCap / 1000000).toFixed(2)}M` : '';
+          
+          return {
+            content: [{ 
+              type: "text" as const, // Ajoutez "as const" pour fixer le type littéral
+              text: `Subnet: Masa Subnet 42 (Bittensor Gateway)
+  Status: active
+  Nodes: ${stats.totalValidators}/${stats.totalNeurons}
+  Subnets: ${stats.totalSubnets}
+  Last Update: ${stats.lastUpdated}${taoInfo}
+  
+  Note: This subnet provides access to the Bittensor network. 
+  Use bittensor_* tools for more detailed information.
+  Use tao_stats_usage tool to check API usage statistics.` 
+            }]
+          };
         };
+        
+        // Try to get cached data if the service implements the cache interface
+        if ((bittensorService as any).getApiUsageStats) {
+          try {
+            // Import the cache service
+            const { taoStatsCache } = await import('../services/tao-cache-service.js');
+            
+            // Use cache with 30 minutes TTL
+            return await taoStatsCache.withCache(
+              cacheKey,
+              getSubnetInfoData,
+              {
+                ttl: 30 * 60 * 1000, // 30 minutes
+                fallbackToCache: true
+              }
+            );
+          } catch (cacheError) {
+            logger.warn('Could not use taoStatsCache, falling back to direct call:', cacheError);
+            return await getSubnetInfoData();
+          }
+        } else {
+          // If the service doesn't implement cache, just call directly
+          return await getSubnetInfoData();
+        }
       } catch (error) {
         logger.error('Error in subnet_info tool:', error);
         return {
           content: [{ 
-            type: "text", 
+            type: "text" as const, // Ajoutez "as const" pour fixer le type littéral
             text: `Error getting subnet info: ${error instanceof Error ? error.message : 'Unknown error'}` 
           }],
           isError: true

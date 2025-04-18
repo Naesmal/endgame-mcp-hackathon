@@ -70,7 +70,8 @@ const envSchema = z.object({
 
   // Configuration TAO_STATS pour Bittensor
   TAO_STAT_API_KEY: z.string().optional(),
-  TAO_STATS_API_KEY: z.string().optional(), // Accepter aussi cette variante
+  TAO_STATS_API_KEY: z.string().optional(),
+  TAO_STAT_DAILY_LIMIT: z.string().transform(val => parseInt(val) || 5).optional()
 });
 
 // Modifier la fonction getEnv() pour ajouter la validation conditionnelle

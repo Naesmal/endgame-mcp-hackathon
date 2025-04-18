@@ -1,3 +1,4 @@
+// bittensor-service.ts
 import { env, isBittensorEnabled } from '../config/env';
 import logger from '../utils/logger';
 import {
@@ -84,28 +85,41 @@ class BittensorDisabledService implements BittensorService {
  * Fabrique pour le service Bittensor
  */
 export class BittensorServiceFactory {
+  private static instance: BittensorService | null = null;
+
   /**
    * Crée une instance du service Bittensor
    * @returns Promise avec l'instance du service Bittensor
    */
   static async createService(): Promise<BittensorService> {
+    // Si nous avons déjà une instance, la retourner (Singleton)
+    if (this.instance) {
+      return this.instance;
+    }
+    
     // Vérifier si la fonctionnalité Bittensor est activée
     if (!isBittensorEnabled()) {
-      return new BittensorDisabledService();
+      this.instance = new BittensorDisabledService();
+      return this.instance;
     }
 
     try {
       // Vérifier si la clé TAO_STAT_API_KEY est définie
       if (!env.TAO_STAT_API_KEY) {
         logger.error('TAO_STAT_API_KEY is required for Bittensor functionality');
-        return new BittensorDisabledService();
+        this.instance = new BittensorDisabledService();
+        return this.instance;
       }
 
-      const { BittensorApiService } = await import('./bittensor-api.js');
-      return new BittensorApiService();
+      // Utiliser le service mis en cache au lieu du service API direct
+      const { BittensorCachedApiService } = await import('./bittensor-cached-api.js');
+      this.instance = new BittensorCachedApiService();
+      logger.info('BittensorCachedApiService successfully created with caching capabilities');
+      return this.instance;
     } catch (error) {
-      logger.error('Failed to create BittensorApiService:', error);
-      return new BittensorDisabledService();
+      logger.error('Failed to create BittensorCachedApiService:', error);
+      this.instance = new BittensorDisabledService();
+      return this.instance;
     }
   }
 }
