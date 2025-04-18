@@ -11,6 +11,63 @@ import logger from '../utils/logger';
 import { env } from '../config/env';
 
 /**
+ * Fonction qui attend que la recherche Twitter soit terminée
+ * @param masaService Service Masa à utiliser
+ * @param jobId ID du job à surveiller
+ * @param timeoutMs Timeout en millisecondes
+ * @param intervalMs Intervalle de polling en millisecondes
+ */
+async function waitForTwitterSearchCompletion(
+  masaService: MasaService,
+  jobId: string,
+  timeoutMs: number = 30000,
+  intervalMs: number = 2000
+): Promise<TwitterSearchResult> {
+  logger.info(`Waiting for Twitter search job ${jobId} to complete`);
+  
+  const startTime = Date.now();
+  
+  // Fonction pour afficher un message de progression cohérent
+  const logProgress = (elapsed: number) => {
+    const seconds = (elapsed / 1000).toFixed(1);
+    logger.info(`Twitter search in progress... (${seconds}s elapsed)`);
+  };
+  
+  // Boucle de polling améliorée
+  while (true) {
+    // Vérifier si nous avons dépassé le timeout
+    const elapsed = Date.now() - startTime;
+    if (elapsed > timeoutMs) {
+      throw new Error(`Twitter search timed out after ${timeoutMs/1000} seconds`);
+    }
+    
+    try {
+      // Vérifier l'état de la recherche
+      const statusResult = await masaService.checkTwitterSearchStatus(jobId);
+      logger.debug(`Twitter search status: ${statusResult.status}`);
+      
+      if (statusResult.status === 'completed') {
+        // Recherche terminée avec succès, récupérer les résultats
+        return await masaService.getTwitterSearchResults(jobId);
+      } else if (statusResult.status === 'failed') {
+        // Recherche échouée
+        throw new Error(`Twitter search failed: ${statusResult.message || 'Unknown error'}`);
+      } else {
+        // Recherche toujours en cours, afficher la progression
+        logProgress(elapsed);
+        
+        // Attendre avant la prochaine vérification
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+      }
+    } catch (error) {
+      // Si l'erreur vient de l'appel de statut lui-même, la propager
+      logger.error(`Error checking Twitter search status: ${error}`);
+      throw error;
+    }
+  }
+}
+
+/**
  * Enregistre l'outil de recherche Twitter de base (compatible API et PROTOCOL)
  * @param server Instance du serveur MCP
  * @param masaService Service Masa à utiliser
@@ -58,45 +115,14 @@ export function registerTwitterSearchTool(server: McpServer, masaService: MasaSe
         
         // Si nous sommes en mode API, nous devons gérer le flux asynchrone
         if (env.MASA_MODE === 'API') {
-          // Attendre que la recherche soit terminée (avec timeout après 30 secondes)
-          const startTime = Date.now();
-          const timeout = 30000; // 30 secondes
-          const pollingInterval = 1000; // 1 seconde entre les vérifications
-          
-          // Fonction pour vérifier périodiquement le statut
-          const checkStatus = async (): Promise<TwitterSearchResult | null> => {
-            // Vérifier si nous avons dépassé le timeout
-            if (Date.now() - startTime > timeout) {
-              throw new Error(`Twitter search timed out after ${timeout/1000} seconds`);
-            }
-            
-            try {
-              // Vérifier l'état de la recherche
-              const statusResult = await masaService.checkTwitterSearchStatus(jobId);
-              logger.debug(`Twitter search status: ${statusResult.status}`);
-              
-              if (statusResult.status === 'completed') {
-                // Recherche terminée avec succès, récupérer les résultats
-                return await masaService.getTwitterSearchResults(jobId);
-              } else if (statusResult.status === 'failed') {
-                // Recherche échouée
-                throw new Error(`Twitter search failed: ${statusResult.message || 'Unknown error'}`);
-              } else {
-                // Recherche toujours en cours, attendre et réessayer
-                await new Promise(resolve => setTimeout(resolve, pollingInterval));
-                return null; // Signale qu'il faut continuer à vérifier
-              }
-            } catch (error) {
-              throw error;
-            }
-          };
-          
-          // Boucle de polling avec gestion d'erreur
-          let results: TwitterSearchResult | null = null;
           try {
-            while (results === null) {
-              results = await checkStatus();
-            }
+            // Utiliser la fonction d'attente améliorée
+            const results = await waitForTwitterSearchCompletion(
+              masaService,
+              jobId,
+              30000, // 30 secondes de timeout
+              2000   // 2 secondes entre chaque vérification
+            );
             
             // À ce stade, nous avons les résultats
             const tweetResults = results.data || [];
@@ -138,6 +164,7 @@ export function registerTwitterSearchTool(server: McpServer, masaService: MasaSe
             };
           } catch (error) {
             // Gérer les erreurs de polling
+            logger.error('Error during Twitter search process:', error);
             return {
               isError: true,
               content: [{

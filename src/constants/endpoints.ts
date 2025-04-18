@@ -2,27 +2,27 @@
 export const API_ENDPOINTS = {
   // Endpoints pour la recherche Twitter
   TWITTER: {
-    SEARCH: '/search/live/twitter',
-    STATUS: '/search/live/twitter/status',
-    RESULT: '/search/live/twitter/result',
+    SEARCH: '/api/v1/search/live/twitter',
+    STATUS: '/api/v1/search/live/twitter/status',
+    RESULT: '/api/v1/search/live/twitter/result',
   },
   
   // Endpoints pour l'indexation de données
   DATA: {
-    INDEX: '/data/index',
-    QUERY: '/data/query',
-    STATUS: '/data/status',
+    INDEX: '/api/v1/data/index',
+    QUERY: '/api/v1/data/query',
+    STATUS: '/api/v1/data/status',
   },
   
   // Nouveaux endpoints
   WEB: {
-    SCRAPE: '/search/live/web/scrape',
+    SCRAPE: '/api/v1/search/live/web/scrape',
   },
   
   ANALYSIS: {
-    TERMS_EXTRACTION: '/search/extraction',
-    DATA_ANALYSIS: '/search/analysis',
-    SIMILARITY: '/search/similarity/twitter',
+    TERMS_EXTRACTION: '/api/v1/search/extraction',
+    DATA_ANALYSIS: '/api/v1/search/analysis',
+    SIMILARITY: '/api/v1/search/similarity/twitter',
   }
 };
 

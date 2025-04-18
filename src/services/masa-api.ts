@@ -68,23 +68,23 @@ export class MasaApiService implements MasaService {
   // Méthodes existantes - améliorées pour gestion correcte du workflow
   async searchTwitter(request: TwitterSearchRequest): Promise<TwitterSearchResult> {
     try {
-      // Préparer la requête au format attendu par l'API
+      // Préparer la requête au format EXACT attendu par l'API
       const apiRequest = {
         query: request.query,
-        max_results: request.count || 10,
-        type: 'searchbyquery' // Type par défaut
+        type: "searchbyquery", // Type est requis par l'API
+        max_results: request.count || 10
       };
       
       logger.info(`Initiating Twitter search for query: ${request.query}`);
       const response = await this.client.post(API_ENDPOINTS.TWITTER.SEARCH, apiRequest);
       
-      // L'API renvoie un UUID dans la réponse
-      const jobId = response.data.uuid;
-      
-      if (!jobId) {
-        throw new Error('No job ID returned from search API');
+      // Vérifier si la réponse contient le format attendu (uuid)
+      if (!response.data || !response.data.uuid) {
+        throw new Error('Invalid response format: missing uuid');
       }
       
+      // L'API renvoie un UUID dans la réponse
+      const jobId = response.data.uuid;
       logger.info(`Twitter search job created with ID: ${jobId}`);
       
       // Renvoyer l'ID du job pour permettre la vérification du statut
@@ -95,6 +95,12 @@ export class MasaApiService implements MasaService {
       };
     } catch (error) {
       logger.error('Error searching Twitter:', error);
+      // Propager l'erreur avec plus de détails pour faciliter le débogage
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status || 'unknown';
+        const message = error.response?.data?.error || error.message;
+        throw new Error(`Twitter search failed with status ${status}: ${message}`);
+      }
       throw error;
     }
   }
@@ -107,6 +113,11 @@ export class MasaApiService implements MasaService {
       logger.info(`Checking Twitter search status for job ${jobId}`);
       const response = await this.client.get(`${API_ENDPOINTS.TWITTER.STATUS}/${jobId}`);
       
+      // Vérifier si la réponse contient le format attendu (status)
+      if (!response.data || !response.data.status) {
+        throw new Error('Invalid response format: missing status');
+      }
+      
       // Mapper les statuts de l'API vers notre interface interne
       const apiStatus = response.data.status.toLowerCase();
       let status: 'pending' | 'completed' | 'failed';
@@ -115,16 +126,28 @@ export class MasaApiService implements MasaService {
         status = 'completed';
       } else if (apiStatus.includes('error')) {
         status = 'failed';
+      } else if (apiStatus === 'processing' || apiStatus === 'in progress') {
+        // Gérer explicitement le cas "in progress" mentionné dans la doc
+        status = 'pending';
       } else {
-        status = 'pending'; // 'processing' et autres états sont considérés comme 'pending'
+        // Par défaut, traiter toute autre valeur comme pending
+        logger.warn(`Unknown API status received: ${apiStatus}, defaulting to 'pending'`);
+        status = 'pending';
       }
       
+      logger.debug(`Twitter search status for job ${jobId}: ${status}`);
       return {
         status,
         message: response.data.error || undefined
       };
     } catch (error) {
       logger.error(`Error checking Twitter search status for job ${jobId}:`, error);
+      // Propager l'erreur avec plus de détails pour faciliter le débogage
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status || 'unknown';
+        const message = error.response?.data?.error || error.message;
+        throw new Error(`Status check failed with status ${status}: ${message}`);
+      }
       throw error;
     }
   }
@@ -134,23 +157,44 @@ export class MasaApiService implements MasaService {
       logger.info(`Getting Twitter search results for job ${jobId}`);
       const response = await this.client.get(`${API_ENDPOINTS.TWITTER.RESULT}/${jobId}`);
       
-      // Vérifier si nous avons reçu un tableau de résultats
-      if (!Array.isArray(response.data)) {
-        throw new Error(`Invalid response format from API: expected array, got ${typeof response.data}`);
+      // La documentation indique que l'API renvoie un tableau d'objets (results)
+      // mais dans votre exemple, il semble que ce soit directement un tableau
+      const tweetData = Array.isArray(response.data) ? response.data : 
+                      (response.data.results ? response.data.results : []);
+      
+      if (!Array.isArray(tweetData)) {
+        logger.warn(`Unexpected response format from API for job ${jobId}: ${JSON.stringify(response.data)}`);
+        throw new Error(`Invalid response format from API: expected array, got ${typeof tweetData}`);
+      }
+      
+      // Journaliser la structure des données reçues pour faciliter le débogage
+      if (tweetData.length > 0) {
+        logger.debug(`Example tweet data format: ${JSON.stringify(tweetData[0])}`);
+      } else {
+        logger.debug(`No tweets found for job ${jobId}`);
       }
       
       // Adapter le format de l'API à notre interface
-      const processedData = response.data.map(tweet => ({
-        Tweet: {
-          ID: tweet.ID || tweet.Metadata?.tweet_id,
-          ExternalID: tweet.ExternalID || tweet.Metadata?.tweet_id?.toString(),
-          Text: tweet.Content || tweet.text,
-          Username: tweet.Metadata?.username || 'unknown',
-          CreatedAt: tweet.Metadata?.created_at || new Date().toISOString(),
-          LikeCount: tweet.Metadata?.public_metrics?.LikeCount,
-          RetweetCount: tweet.Metadata?.public_metrics?.RetweetCount
+      // Basé sur la structure exacte que l'API renvoie (exemple dans la doc)
+      const processedData = tweetData.map(tweet => {
+        // Déterminer si nous avons déjà un format compatible ou si nous devons le transformer
+        if (tweet.Tweet) {
+          return tweet; // Déjà au format compatible
         }
-      }));
+        
+        // Extraction des données depuis le format API
+        return {
+          Tweet: {
+            ID: tweet.ID || tweet.id,
+            ExternalID: tweet.ExternalID || tweet.id?.toString(),
+            Text: tweet.Content || tweet.text,
+            Username: tweet.Metadata?.username || tweet.username || 'unknown',
+            CreatedAt: tweet.Metadata?.created_at || tweet.created_at || new Date().toISOString(),
+            LikeCount: tweet.Metadata?.public_metrics?.LikeCount || tweet.like_count,
+            RetweetCount: tweet.Metadata?.public_metrics?.RetweetCount || tweet.retweet_count
+          }
+        };
+      });
       
       return {
         id: jobId,
@@ -159,6 +203,14 @@ export class MasaApiService implements MasaService {
       };
     } catch (error) {
       logger.error(`Error getting Twitter search results for job ${jobId}:`, error);
+      
+      // Propager l'erreur avec plus de détails pour faciliter le débogage
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status || 'unknown';
+        const message = error.response?.data?.error || error.message;
+        throw new Error(`Results retrieval failed with status ${status}: ${message}`);
+      }
+      
       throw error;
     }
   }
