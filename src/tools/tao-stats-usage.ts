@@ -2,6 +2,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import logger from '../utils/logger';
 import { BittensorService } from '../services/bittensor-service';
+import { env } from '../config/env';
 
 /**
  * Enregistre l'outil de statistiques d'utilisation de l'API TaoStats
@@ -38,7 +39,7 @@ This is either because:
 For optimal API usage:
 1. Ensure you're using the latest BittensorCachedApiService
 2. Verify TAO_STAT_API_KEY is correctly set in your .env file
-3. Set TAO_STAT_DAILY_LIMIT in your .env file (default: 5)` 
+3. Set TAO_STAT_MINUTE_LIMIT in your .env file (default: 5)` 
             }]
           };
         }
@@ -46,34 +47,27 @@ For optimal API usage:
         // Récupérer les statistiques d'utilisation
         const stats = (bittensorService as any).getApiUsageStats();
         
-        // Calculer le taux d'utilisation en pourcentage
-        const usagePercentage = ((stats.apiCallsUsed / (stats.apiCallsUsed + stats.apiCallsRemaining)) * 100).toFixed(2);
+        // Obtenir la limite de requêtes par minute depuis l'environnement ou la valeur par défaut
+        const minuteLimit = (env.TAO_STAT_MINUTE_LIMIT || '5', 10);
         
-        // Formater la date du dernier reset
-        const lastResetDate = new Date();
-        lastResetDate.setUTCDate(stats.lastResetDay);
-        const resetDateStr = lastResetDate.toLocaleDateString();
-        
-        // Afficher la limite à partir de l'environnement ou la valeur par défaut
-        const dailyLimit = process.env.TAO_STAT_DAILY_LIMIT || '5';
-        
-        // Formater la réponse
+        // Formater la réponse avec les nouvelles statistiques par minute
         return {
           content: [{ 
             type: "text", 
             text: `TaoStats API Usage Information
 
-API Calls: ${stats.apiCallsUsed}/${dailyLimit} (${usagePercentage}% used)
+API Calls: ${stats.currentMinuteRequests}/${minuteLimit} (in current minute window)
 Remaining Calls: ${stats.apiCallsRemaining}
+Next window reset in: ${stats.windowResetTime}
 Cache Entries: ${stats.size}
-Last Reset: ${resetDateStr} (UTC)
 
-API limits reset at midnight UTC. The current implementation uses a cache system to minimize API calls.
+API limits: Maximum ${minuteLimit} requests per minute.
+The current implementation uses a sophisticated cache system to minimize API calls.
 
 Recommendations:
 1. Keep the server running to benefit from cached data
 2. For higher API limits, consider upgrading your TaoStats API plan
-3. Set TAO_STAT_DAILY_LIMIT in your .env file to match your actual API plan limit` 
+3. Set TAO_STAT_MINUTE_LIMIT in your .env file to match your actual API plan limit` 
           }]
         };
       } catch (error) {
