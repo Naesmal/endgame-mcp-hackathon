@@ -336,9 +336,9 @@ export class BittensorCachedApiService implements BittensorService {
    */
   getApiUsageStats(): {
     size: number;
-    apiCallsUsed: number;
+    currentMinuteRequests: number;
     apiCallsRemaining: number;
-    lastResetDay: number;
+    windowResetTime: string;
   } {
     return taoStatsCache.getCacheStats();
   }
