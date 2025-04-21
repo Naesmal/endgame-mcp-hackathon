@@ -43,7 +43,7 @@ MASA_MODE=API  # Options: API or PROTOCOL
 
 # API Configuration
 MASA_API_KEY=your_api_key_here
-MASA_API_BASE_URL=https://api1.dev.masalabs.ai
+MASA_API_BASE_URL=https://data.dev.masalabs.ai
 
 # Protocol Configuration
 MASA_PROTOCOL_NODE_URL=http://localhost:8080
@@ -68,6 +68,16 @@ TAO_STAT_DAILY_LIMIT=5  # Default API request limit per day
 ```bash
 npm run build
 ```
+
+## 🔑 Masa API and Protocol Setup
+
+### Obtaining Masa API Key
+To get a Masa API key for this project, visit:
+- [Masa API Documentation](https://developers.masa.ai/docs/index-API/masa-api-search)
+
+### Setting Up Masa Protocol
+For instructions on setting up the Masa Protocol environment, refer to:
+- [Masa Protocol Environment Setup Guide](https://developers.masa.ai/docs/masa-protocol/environment-setup)
 
 ## Usage
 
